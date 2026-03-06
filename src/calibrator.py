@@ -213,8 +213,8 @@ class SteeringCalibrator:
                 result.steering_vectors[key] = diff
 
                 # Cohen's d
-                c_norms = torch.stack(c_list).norm(dim=-1).numpy()
-                w_norms = torch.stack(w_list).norm(dim=-1).numpy()
+                c_norms = torch.stack(c_list).float().norm(dim=-1).cpu().numpy()
+                w_norms = torch.stack(w_list).float().norm(dim=-1).cpu().numpy()
                 pooled_std = np.sqrt(
                     (c_norms.var() * (len(c_norms) - 1) + w_norms.var() * (len(w_norms) - 1))
                     / (len(c_norms) + len(w_norms) - 2)

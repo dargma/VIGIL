@@ -85,8 +85,8 @@ def _verify_architecture(model, spec: ModelSpec):
 
 
 def _load_qwen3_vl(spec: ModelSpec, dtype, device) -> Dict[str, Any]:
-    from transformers import Qwen2_5_VLForConditionalGeneration, AutoProcessor
-    model = Qwen2_5_VLForConditionalGeneration.from_pretrained(
+    from transformers import Qwen3VLForConditionalGeneration, AutoProcessor
+    model = Qwen3VLForConditionalGeneration.from_pretrained(
         spec.hf_id, torch_dtype=dtype, device_map=device,
     )
     processor = AutoProcessor.from_pretrained(spec.hf_id)
@@ -94,9 +94,9 @@ def _load_qwen3_vl(spec: ModelSpec, dtype, device) -> Dict[str, Any]:
         "model": model,
         "processor": processor,
         "tokenizer": processor.tokenizer,
-        "get_layers_fn": lambda: model.model.layers,
+        "get_layers_fn": lambda: model.model.language_model.layers,
         "get_lm_head_fn": lambda: model.lm_head,
-        "get_norm_fn": lambda: model.model.norm,
+        "get_norm_fn": lambda: model.model.language_model.norm,
     }
 
 

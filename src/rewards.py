@@ -239,52 +239,116 @@ def compute_composite_reward(
 
 class InSituVisionReward:
     """Lightweight reward: collect vision head activations during normal generation.
-    Zero extra cost — hooks collect during the model's own forward passes.
-    Less precise than full R_vhad but free.
+    Zero extra forward passes — hooks capture activations during the model's own
+    generate() call. Less precise than full R_vhad (no black image comparison)
+    but adds zero compute overhead.
+
+    Usage with generate():
+        reward = InSituVisionReward(model_info, vision_heads)
+        reward.install()
+        output = model.generate(**inputs, max_new_tokens=256)
+        score = reward.compute()  # automatically collected per-step activations
+        reward.remove()
     """
 
     def __init__(self, model_info: Dict[str, Any], vision_heads: List[Tuple[int, int]]):
-        self.collector = VisionHeadActivationCollector(model_info, vision_heads)
+        self.model_info = model_info
         self.vision_heads = vision_heads
-        self._running_norms: List[Dict[Tuple[int, int], float]] = []
+        self.num_heads = model_info["num_heads"]
+        self.head_dim = model_info["head_dim"]
+        self._step_norms: List[Dict[Tuple[int, int], float]] = []
+        self._captured: Dict[int, torch.Tensor] = {}
+        self._hooks = []
+        self._target_layers = set(li for li, _ in vision_heads)
 
     def install(self):
-        self.collector.install()
+        """Install hooks that auto-collect per-step activations."""
+        self.remove()
+        layers = self.model_info["get_layers_fn"]()
+
+        for li in self._target_layers:
+            o_proj = layers[li].self_attn.o_proj
+
+            def make_hook(layer_idx):
+                def hook_fn(module, args):
+                    self._captured[layer_idx] = args[0].detach()
+                return hook_fn
+
+            handle = o_proj.register_forward_pre_hook(make_hook(li))
+            self._hooks.append(handle)
+
+        # Install a post-forward hook on the last target layer to snapshot norms
+        last_layer = max(self._target_layers)
+        o_proj_last = layers[last_layer].self_attn.o_proj
+
+        def snapshot_hook(module, args, output):
+            norms = {}
+            for (li, hi) in self.vision_heads:
+                inp = self._captured.get(li)
+                if inp is None:
+                    continue
+                last = inp[0, -1, :].view(self.num_heads, self.head_dim)
+                norms[(li, hi)] = last[hi].float().norm().item()
+            if norms:
+                self._step_norms.append(norms)
+            self._captured.clear()
+
+        handle = o_proj_last.register_forward_hook(snapshot_hook)
+        self._hooks.append(handle)
 
     def remove(self):
-        self.collector.remove()
-
-    def step(self):
-        """Call after each forward pass during generation to record activations."""
-        norms = self.collector.get_activation_norms()
-        if norms:
-            self._running_norms.append(norms)
-        self.collector.clear()
+        for h in self._hooks:
+            h.remove()
+        self._hooks.clear()
+        self._captured.clear()
+        self._step_norms.clear()
 
     def compute(self) -> float:
         """Compute reward from collected activation trajectory.
 
-        Higher mean activation of vision heads = model is attending to visual features.
+        Measures two things:
+        1. Overall vision head activation magnitude (are they active at all?)
+        2. Activation stability (do they decay over generation? = drift)
+
+        Returns 0-1 reward. Higher = vision heads stayed active throughout.
         """
-        if not self._running_norms:
+        if not self._step_norms:
             return 0.0
 
-        mean_norms = []
-        for step_norms in self._running_norms:
-            mean_norms.append(np.mean(list(step_norms.values())))
+        mean_per_step = [np.mean(list(s.values())) for s in self._step_norms]
 
-        # Reward based on: did vision head activation stay high throughout generation?
-        # Penalize decay (the drift problem)
-        overall_mean = np.mean(mean_norms)
-        if len(mean_norms) > 1:
-            # Check if activation decays (bad) vs stays stable (good)
-            first_half = np.mean(mean_norms[:len(mean_norms) // 2])
-            second_half = np.mean(mean_norms[len(mean_norms) // 2:])
-            decay_ratio = second_half / (first_half + 1e-8)
-            # Sigmoid mapping: ratio 1.0 → 0.5 reward, >1 → higher, <1 → lower
-            return float(1.0 / (1.0 + np.exp(-5.0 * (decay_ratio - 0.8))))
-        return float(1.0 / (1.0 + np.exp(-0.1 * overall_mean)))
+        if len(mean_per_step) < 2:
+            # Single step — just check if activation is non-trivial
+            return float(min(mean_per_step[0] / 10.0, 1.0))
+
+        first_half = np.mean(mean_per_step[:len(mean_per_step) // 2])
+        second_half = np.mean(mean_per_step[len(mean_per_step) // 2:])
+        decay_ratio = second_half / (first_half + 1e-8)
+
+        # decay_ratio ~1.0 = stable, <0.5 = severe drift, >1.0 = increasing
+        # Map to reward via sigmoid centered at 0.8
+        return float(1.0 / (1.0 + np.exp(-5.0 * (decay_ratio - 0.8))))
+
+    def get_trajectory(self) -> List[float]:
+        """Return per-step mean vision head activation norms for analysis."""
+        return [np.mean(list(s.values())) for s in self._step_norms]
 
     def clear(self):
-        self._running_norms.clear()
-        self.collector.clear()
+        self._step_norms.clear()
+        self._captured.clear()
+
+
+def compute_composite_reward_lightweight(
+    r_correct: float,
+    r_insitu: float,
+    r_fluency: float,
+    w_correct: float = 0.3,
+    w_visual: float = 0.5,
+    w_fluency: float = 0.2,
+) -> float:
+    """Lightweight composite reward (no R_asi, uses in-situ only).
+
+    R_total = w1*R_correct + w2*R_insitu + w3*R_fluency
+    Zero extra forward passes. R_insitu captures vision head stability during generation.
+    """
+    return w_correct * r_correct + w_visual * r_insitu + w_fluency * r_fluency

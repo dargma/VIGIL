@@ -36,7 +36,8 @@ def main():
     args = parser.parse_args()
 
     # Load model
-    model_info = load_model(args.model)
+    import torch
+    model_info = load_model(args.model, dtype=torch.float16)
 
     # Load calibration data
     samples = build_calibration_set(limit_per_source=args.limit_per_source)
