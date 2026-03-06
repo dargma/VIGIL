@@ -1,0 +1,62 @@
+# VIGIL Training Configuration
+
+reward:
+  w_correct: 0.3
+  w_visual_grounding: 0.5
+  w_fluency: 0.2
+  alpha_vhad: 0.6  # within visual_grounding: α*R_vhad + (1-α)*R_asi
+
+  # R_vhad settings
+  vhad:
+    black_image_size: [224, 224]  # model-dependent, override per model
+    normalize: true
+
+  # R_asi settings
+  asi:
+    similarity_metric: "token_jaccard"  # or "exact_match", "f1"
+    max_new_tokens: 256
+
+  # Fluency
+  fluency:
+    min_length: 3
+    min_unique_chars: 3
+    length_penalty_start: 0.8  # fraction of max_tokens
+
+grpo:
+  learning_rate: 5.0e-6
+  beta: 0.01  # KL coefficient
+  epsilon: 0.2  # clipping
+  group_size: 8
+  max_new_tokens: 512
+  temperature: 0.8
+  num_steps: 100
+  batch_size: 1
+  grad_accum: 8
+  warmup_ratio: 0.1
+  save_every: 10
+  eval_every: 10
+  seed: 42
+
+dapo:
+  learning_rate: 5.0e-6
+  beta: 0.0  # no KL penalty
+  epsilon_low: 0.2
+  epsilon_high: 0.28  # asymmetric clipping
+  group_size: 8
+  max_new_tokens: 512
+  temperature: 0.8
+  num_steps: 100
+  batch_size: 1
+  grad_accum: 8
+  dynamic_sampling: true  # resample on zero-variance groups
+  overlong_shaping: true
+  warmup_ratio: 0.1
+  save_every: 10
+  eval_every: 10
+  seed: 42
+
+calibration:
+  max_samples: 1000
+  min_per_bucket: 5
+  top_k_heads: 20  # ~7% of heads
+  confidence_split_threshold: 5  # switch to confidence split if < N incorrect

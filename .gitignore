@@ -1,0 +1,29 @@
+# Data (18GB+ datasets on Drive)
+data/
+
+# Checkpoints
+checkpoints/
+
+# Logs
+logs/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+build/
+
+# Environment
+.env
+*.pt
+*.bin
+*.safetensors
+
+# OS
+.DS_Store
+Thumbs.db
+
+# HuggingFace cache
+.cache/

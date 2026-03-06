@@ -1,0 +1,60 @@
+# VIGIL Evaluation Configuration
+
+benchmarks:
+  pope:
+    splits: ["random", "popular", "adversarial"]
+    metric: "f1"
+    format: "yesno"
+
+  mmbench:
+    split: "dev_en"
+    metric: "accuracy"
+    format: "mc"
+
+  mme:
+    subtasks: ["perception", "cognition"]
+    metric: "score"
+    format: "yesno"
+
+  mmmu:
+    split: "validation"
+    metric: "accuracy"
+    format: "mc"
+
+blind_test:
+  black_image_size: [224, 224]
+  benchmarks: ["pope", "mmbench", "mme"]
+  gap_metric: "acc_real - acc_black"
+
+eval_modes:
+  - name: "greedy_baseline"
+    steering: false
+    trained: false
+    blind: false
+
+  - name: "steered_only"
+    steering: true
+    trained: false
+    blind: false
+
+  - name: "grpo_steered"
+    steering: true
+    trained: "grpo"
+    blind: false
+
+  - name: "dapo_steered"
+    steering: true
+    trained: "dapo"
+    blind: false
+
+  - name: "blind_test"
+    steering: false
+    trained: false
+    blind: true
+
+visualization:
+  style: "seaborn-v0_8-whitegrid"
+  font_size: 12
+  figsize: [10, 6]
+  output_dir: "lab/reports"
+  dpi: 150

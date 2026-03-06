@@ -1,0 +1,67 @@
+# VIGIL Model Registry
+# Architecture params verified against HF configs
+
+models:
+  qwen3_vl_2b:
+    name: "Qwen3-VL-2B"
+    hf_id: "Qwen/Qwen3-VL-2B-Instruct"
+    hf_id_thinking: "Qwen/Qwen3-VL-2B-Thinking"
+    model_type: "qwen3_vl"
+    num_hidden_layers: 28
+    num_attention_heads: 16
+    num_key_value_heads: 8
+    head_dim: 128
+    hidden_size: 2048
+    gqa: true
+    steer_layers_start: 4  # DeepStack on layers 0-3, steer 4+
+    trust_remote_code: false
+    max_temp: 1.5
+    notes: "Main target. GQA 16Q/8KV."
+
+  internvl3_5_1b:
+    name: "InternVL3.5-1B"
+    hf_id: "OpenGVLab/InternVL3_5-1B"
+    model_type: "internvl3"
+    num_hidden_layers: 28
+    num_attention_heads: 16
+    num_key_value_heads: 8
+    head_dim: 64
+    hidden_size: 1024
+    gqa: true
+    steer_layers_start: 0
+    trust_remote_code: true
+    trl_beta: 0.0  # ref model fails with trust_remote_code
+    notes: "Main target. trust_remote_code required."
+
+  deepseek_vl2_tiny:
+    name: "DeepSeek-VL2-Tiny"
+    hf_id: "deepseek-ai/deepseek-vl2-tiny"
+    model_type: "deepseek_vl2"
+    num_hidden_layers: 12
+    num_attention_heads: 10
+    num_key_value_heads: 10
+    head_dim: 256
+    hidden_size: 2560
+    gqa: false  # MHA — cleanest for head steering
+    steer_layers_start: 0
+    trust_remote_code: true
+    trl_compatible: false  # needs custom training loop
+    max_temp: 0.7
+    is_moe: true
+    num_experts: 64
+    top_k_experts: 6
+    max_context: 4096
+    notes: "MoE model. TRL incompatible. Custom loop needed."
+
+  qwen2_5_vl_7b:
+    name: "Qwen2.5-VL-7B"
+    hf_id: "Qwen/Qwen2.5-VL-7B-Instruct"
+    model_type: "qwen2_vl"
+    num_hidden_layers: 28
+    num_attention_heads: 28
+    num_key_value_heads: 4
+    head_dim: 128
+    hidden_size: 3584
+    gqa: true
+    eval_only: true  # unsteered baseline reference
+    notes: "7B reference. Eval only, no steering/training."
