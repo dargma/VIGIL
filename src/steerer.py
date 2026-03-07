@@ -38,8 +38,9 @@ class SteeringHook:
         inp = args[0]  # (batch, seq, hidden)
         modified = inp.clone()
         batch = modified.shape[0]
-        # Reshape last token: (batch, hidden) -> (batch, num_heads, head_dim)
-        last_token = modified[:, -1, :].view(batch, self.num_heads, self.head_dim)
+        # Clone last token separately to avoid view aliasing
+        last_hidden = modified[:, -1, :].clone()
+        last_token = last_hidden.view(batch, self.num_heads, self.head_dim)
         vec = self.steering_vector.to(last_token.device, last_token.dtype)
         last_token[:, self.head_idx, :] += self.alpha * vec
         modified[:, -1, :] = last_token.reshape(batch, self.num_heads * self.head_dim)
