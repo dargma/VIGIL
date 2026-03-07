@@ -1,0 +1,25 @@
+{
+  "model": "qwen3_vl_2b",
+  "mode": "steered_only",
+  "timestamp": "2026-03-07T00:52:10.096956",
+  "benchmarks": {
+    "pope_random": {
+      "benchmark": "pope_random",
+      "accuracy": 81.0,
+      "correct": 162,
+      "total": 200
+    },
+    "pope_popular": {
+      "benchmark": "pope_popular",
+      "accuracy": 78.5,
+      "correct": 157,
+      "total": 200
+    },
+    "pope_adversarial": {
+      "benchmark": "pope_adversarial",
+      "accuracy": 80.0,
+      "correct": 160,
+      "total": 200
+    }
+  }
+}

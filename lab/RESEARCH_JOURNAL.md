@@ -160,9 +160,21 @@ Saved: `lab/results/baseline/eval_qwen3_vl_2b_greedy_baseline_20260307_000338.js
 ### Key Decision
 - Steered eval needs to be re-run with the fixed steerer.py in next GPU session.
 
+### Steered Eval Results (uniform alpha=1.0, 200 samples each)
+Re-run completed with fixed steerer. **Steering helps across all splits!**
+
+| Split | Baseline | Steered | Delta |
+|-------|----------|---------|-------|
+| Random | 79.0% | **81.0%** | **+2.0pp** |
+| Popular | 76.5% | **78.5%** | **+2.0pp** |
+| Adversarial | 78.5% | **80.0%** | **+1.5pp** |
+
+Saved: `lab/results/steered_uniform/eval_qwen3_vl_2b_steered_only_20260307_011743.json`
+
+No samples skipped — clone fix resolved the tensor aliasing completely.
+
 ### Next (for next GPU session)
-1. Re-run steered POPE eval (uniform alpha=1.0) with fixed steerer
-2. Run steered POPE eval (proportional alpha) — compare uniform vs proportional
-3. Blind test baseline (Gap metric)
-4. Two-head-types ablation (feature heads vs decision heads)
-5. GRPO training with VIGIL reward
+1. Run steered POPE eval (proportional alpha) — compare uniform vs proportional
+2. Blind test baseline (Gap metric)
+3. Two-head-types ablation (feature heads vs decision heads)
+4. GRPO training with VIGIL reward
