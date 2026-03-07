@@ -100,6 +100,25 @@ class ActivationSteerer:
         for hook in self.hooks:
             hook.activate(alpha)
 
+    def steer_proportional(self, global_alpha: float = 1.0):
+        """Steer each head proportionally to its Cohen's d score.
+
+        Heads with higher Cohen's d (stronger correct/incorrect separation)
+        get steered more aggressively. This is more surgical than uniform alpha.
+        """
+        scores = self.calibration.head_scores
+        if not scores:
+            self.steer(global_alpha)
+            return
+
+        max_score = max(scores.values()) if scores else 1.0
+        for hook in self.hooks:
+            key = (hook.layer_idx, hook.head_idx)
+            score = scores.get(key, 0.0)
+            # Normalize to [0, 1] relative to max score, then scale by global_alpha
+            per_head_alpha = (score / max_score) * global_alpha if max_score > 0 else global_alpha
+            hook.activate(per_head_alpha)
+
     def steer_adaptive(self, agreement: float, threshold: float = 0.7):
         """Steer with strength inversely proportional to agreement."""
         if agreement < threshold:

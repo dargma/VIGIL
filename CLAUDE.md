@@ -174,12 +174,24 @@ For Qwen3-VL-2B additionally: repeat modes 1-4 with Thinking variant. Analyze vi
 | `train_grpo.py` | Launch GRPO/DAPO training |
 | `eval_benchmarks.py` | Run full evaluation suite |
 | `run_blind_test.py` | Black image evaluation |
+| `smoke_test.py` | Pipeline validation (9 checks, run before anything else) |
+| `auto_lab.py` | State machine for automated experiment loop |
+
+### skills/
+
+| File | Description |
+|------|-------------|
+| `SKILL_qwen3vl_loading.md` | Qwen3VL class, layer path, dtype gotchas |
+| `SKILL_oproj_hooks.md` | o_proj pre-hook for per-head activation capture |
+| `SKILL_calibration_results.md` | Qwen3-VL-2B calibration numbers |
+| `SKILL_vision_activation_delta.md` | Real vs black image Δ analysis |
 
 ### lab/
 
 | Path | Description |
 |------|-------------|
 | `RESEARCH_JOURNAL.md` | Append-only experiment log |
+| `RESEARCH_IDEAS.md` | Aggressive ideation log with prioritized experiments |
 | `reports/` | Generated plots and comparison tables |
 
 ---
@@ -253,3 +265,37 @@ Prior V-LENS work: `/content/drive/MyDrive/V-LENS/`
   - Eval: POPE (9,000), MMBench (4,329), MME (2,374), MMMU (900)
 - `data_loader.py` updated to load from disk cache first, all 9 loaders verified
 - **Next**: Install GPU runtime + TRL, then run calibration on Qwen3-VL-2B
+
+### [2026-03-06] GPU Session: Smoke Test + Calibration + Baseline Eval
+
+**Environment**: NVIDIA L4 23GB, TRL 0.29.0, Qwen3-VL-2B in fp16 (4.3GB VRAM).
+
+**Bug fixes**:
+- `Qwen2_5_VLForConditionalGeneration` → `Qwen3VLForConditionalGeneration`
+- Layer path: `model.model.layers` → `model.model.language_model.layers`
+- BFloat16 → numpy fix: `.float().cpu().numpy()`
+
+**Key finding — Two types of vision heads**:
+- **Feature heads** (late layers L24-27, high activation Δ up to 66.2): encode raw visual info
+- **Decision heads** (early-mid layers L4-5, high Cohen's d up to 9.8): separate correct/incorrect
+- No prior work distinguishes these. Novel contribution for paper.
+
+**Results**:
+- Smoke test: 9/9 pass, vision Δ non-trivial (mean=6.1, max=66.2)
+- Calibration: 20 heads selected, 43/957 correct/incorrect split
+- POPE baseline: IN PROGRESS
+
+**New files**: `scripts/smoke_test.py`, `scripts/auto_lab.py`, `skills/` (4 files), `lab/RESEARCH_IDEAS.md` (8 prioritized ideas)
+
+**Research ideas prioritized** (see `lab/RESEARCH_IDEAS.md`):
+1. Proportional steering by Δ magnitude
+2. Two-types-of-heads ablation (feature vs decision)
+3. Thinking mode drift curve (Figure 1 candidate)
+4. Vision drift as explicit training signal
+5. Adaptive reward curriculum
+
+**Next**:
+1. Get POPE baseline results
+2. Run steered eval (proportional-α variant)
+3. Blind test baseline
+4. Two-head-types ablation

@@ -23,20 +23,20 @@ from src.blind_test import run_blind_test, save_blind_test_results
 
 
 @torch.no_grad()
-def generate_answer(model_info, question, image, steerer=None, agreement_monitor=None):
-    """Generate an answer, optionally with steering."""
+def generate_answer(model_info, question, image, steerer=None, steer_mode="uniform"):
+    """Generate an answer, optionally with steering.
+
+    Args:
+        steer_mode: "uniform" (same alpha for all heads) or "proportional" (by Cohen's d)
+    """
     inputs = make_chat_prompt(model_info, question, image)
     model = model_info["model"]
 
-    if steerer and agreement_monitor:
-        # First pass: get hidden states for agreement
-        outputs = model(**inputs, output_hidden_states=True)
-        hidden_states = outputs.hidden_states
-        should_steer, alpha = agreement_monitor.should_steer(hidden_states)
-        if should_steer:
-            steerer.steer(alpha)
+    if steerer:
+        if steer_mode == "proportional":
+            steerer.steer_proportional(global_alpha=1.0)
         else:
-            steerer.release()
+            steerer.steer(alpha=1.0)
 
     # Generate
     input_ids = inputs.get("input_ids")
@@ -54,7 +54,7 @@ def generate_answer(model_info, question, image, steerer=None, agreement_monitor
     return answer.strip()
 
 
-def eval_pope(model_info, split, steerer=None, agreement_monitor=None, limit=500):
+def eval_pope(model_info, split, steerer=None, steer_mode="uniform", limit=500):
     """Evaluate on POPE benchmark."""
     samples = load_pope(split=split, limit=limit)
     correct = 0
@@ -64,7 +64,7 @@ def eval_pope(model_info, split, steerer=None, agreement_monitor=None, limit=500
         try:
             pred = generate_answer(
                 model_info, sample["question"], sample.get("image"),
-                steerer, agreement_monitor,
+                steerer, steer_mode,
             )
             gt = sample["answer"]
             pred_yn = "yes" if "yes" in pred.lower()[:10] else "no"
@@ -90,20 +90,20 @@ def main():
     parser.add_argument("--checkpoint", type=str, default=None,
                         help="Trained model checkpoint (for grpo/dapo modes)")
     parser.add_argument("--mode", type=str, default="greedy_baseline",
-                        choices=["greedy_baseline", "steered_only", "grpo_steered",
-                                 "dapo_steered", "blind_test"])
+                        choices=["greedy_baseline", "steered_only", "steered_proportional",
+                                 "grpo_steered", "dapo_steered", "blind_test"])
     parser.add_argument("--alpha", type=float, default=1.0)
     parser.add_argument("--limit", type=int, default=500)
     parser.add_argument("--output-dir", type=str, default="lab/reports")
     args = parser.parse_args()
 
     # Load model
-    model_info = load_model(args.model)
+    model_info = load_model(args.model, dtype=torch.float16)
 
     # Setup steering if needed
     steerer = None
     agreement_monitor = None
-    if args.mode in ("steered_only", "grpo_steered", "dapo_steered") and args.calibration_dir:
+    if args.mode in ("steered_only", "steered_proportional", "grpo_steered", "dapo_steered") and args.calibration_dir:
         calibration = CalibrationResult.load(args.calibration_dir)
         steer_start = model_info.get("steer_layers_start", 0)
         steerer = ActivationSteerer(model_info, calibration, steer_start)
@@ -129,11 +129,10 @@ def main():
         save_blind_test_results(bt_result, args.output_dir)
         results["benchmarks"]["blind_test"] = bt_result
     else:
+        steer_mode = "proportional" if args.mode == "steered_proportional" else "uniform"
         for split in ["random", "popular", "adversarial"]:
-            r = eval_pope(model_info, split, steerer, agreement_monitor, limit=args.limit)
+            r = eval_pope(model_info, split, steerer, steer_mode, limit=args.limit)
             results["benchmarks"][f"pope_{split}"] = r
-            if agreement_monitor:
-                agreement_monitor.reset()
 
     # Save results
     out_dir = Path(args.output_dir)
