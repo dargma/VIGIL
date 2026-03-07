@@ -390,3 +390,42 @@ Trained models are degenerate (always "no") so heatmap comparison is baseline-on
 - `scripts/visual_analysis_1.py` — Analysis 1 attention heatmap
 - `lab/results/block1/A_correct_only_*.json` — Setting A results
 - `lab/results/block1/B_correct_plus_iig_*.json` — Setting B results
+
+---
+
+## 2026-03-07 Session 2b — Block 1 v2 Also Collapsed
+
+### Configuration (v2 changes from v1)
+- group_size=8 (from 4), temp=1.2 (from 1.0), max_completion=128 (from 64)
+- lr=2e-6 (from 5e-6), LoRA r=8 (from 16)
+- Added format reward (0.3 weight): +1.0 starts with yes/no, +0.5 contains, -0.5 degenerate
+- 20 steps (from 50)
+
+### Results — Both collapsed identically
+
+| Setting | Step 0 | Step 20 |
+|---------|--------|---------|
+| (A) correct+format | POPE=76.0%, Gap=26.0pp | POPE=30.0%, Gap=30.0pp |
+| (B) correct+format+IIG | POPE=76.0%, Gap=26.0pp | POPE=30.0%, Gap=30.0pp |
+
+- Both collapsed to always-"yes" (yes=62, no=0) — opposite polarity from v1's always-"no"
+- IIG: mean=0.588, std=0.260, 100% positive, but irrelevant — collapse dominates
+- Gap "increase" (26→30pp) is an artifact: model says "yes" to everything, black image equally broken
+
+### Analysis: Why GRPO collapses on binary VQA at 2B scale
+1. **Binary reward + small vocabulary**: Only two valid answers (yes/no). Within a GRPO group, either all agree (zero gradient) or some disagree (gradient pushes toward majority). Over iterations, one answer wins.
+2. **Reward is non-informative**: R_correct is 0 or 1. No partial credit. No gradient toward "better wrong answers."
+3. **Format reward insufficient**: Even with format penalty, the model found a new degenerate mode (always-yes).
+4. **KL penalty too weak**: beta=0.01 allows model to drift far from reference in just 20 steps.
+5. **Fundamental mismatch**: GRPO was designed for code/reasoning with diverse outputs. Binary VQA has ~1 bit of output entropy.
+
+### v3 (running): Ultra-conservative test
+- beta=0.1 (10x), lr=5e-7 (10x lower), LoRA r=4, only 5 steps
+- If this also collapses: GRPO is not viable for binary VQA. Must pivot.
+
+### Pivot candidates if v3 fails
+1. **Skip to Block 2** with longer-form questions (not binary VQA) where GRPO has more output diversity
+2. **KTO (Kahneman-Tversky Optimization)**: doesn't need paired preferences, works with binary feedback
+3. **DPO with IIG-based preferences**: rank candidates by IIG, train to prefer high-IIG responses
+4. **SFT on high-IIG samples**: filter VQAv2 for samples where model gives correct answer + high IIG, fine-tune
+5. **GRPO on Thinking mode directly** (Block 3): longer outputs → more diversity → GRPO works better
