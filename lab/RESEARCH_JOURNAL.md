@@ -332,3 +332,61 @@ Marginal effect. Higher alpha hurts thinking model — extended reasoning chain 
 ### Next
 1. Block 1: Minimal GRPO (50 steps) — R_correct only vs R_correct + IIG
 2. Monitor IIG variation across steps and Blind Test Gap
+
+---
+
+## 2026-03-07 Session 2 — Block 1 Minimal GRPO Results
+
+### Configuration
+- Model: Qwen3-VL-2B-Instruct (fp16)
+- Data: VQAv2 yes/no subset (2000 samples)
+- GRPO: TRL GRPOTrainer, LoRA r=16 alpha=32, num_generations=4, temp=1.0, beta=0.01
+- max_completion_length=64, lr=5e-6, grad_accum=8, 50 steps
+- Setting A: R_correct only
+- Setting B: R_correct + IIG (lambda=0.0615, eps=0.1)
+
+### Results
+
+| Setting | Step | POPE-Adv | Real Acc | Black Acc | Gap |
+|---------|------|----------|----------|-----------|-----|
+| A (correct only) | 0 | 76.0% | 76.0% | 50.0% | 26.0pp |
+| A (correct only) | 50 | **31.5%** | 31.5% | 0.0% | 31.5pp |
+| B (correct+IIG) | 0 | 76.0% | 76.0% | 50.0% | 26.0pp |
+| B (correct+IIG) | 50 | **31.0%** | 31.0% | 0.0% | 31.0pp |
+
+**Go/No-Go**: MARGINAL (Gap delta = -0.5pp, within 2pp threshold)
+
+### CRITICAL FAILURE: GRPO Collapse
+
+Both settings suffered **catastrophic mode collapse**:
+- POPE accuracy dropped from 76% to ~31% (below random chance for balanced yes/no)
+- Black image accuracy dropped to 0.0% — model learned to **always answer "no"**
+- The Gap increase (26→31pp) is an artifact of collapse, not improvement
+
+**Root cause analysis**:
+1. **Binary reward + small group**: num_generations=4 with binary yes/no reward produces very noisy gradients. When all 4 generations agree, zero variance → zero gradient. When they disagree, gradient pushes toward one answer.
+2. **Low temperature**: temp=1.0 is too low for code/VLM models — completions are near-identical, limiting exploration.
+3. **Short completions**: max_completion_length=64 with yes/no answers means most completions are truncated (clipped_ratio near 1.0), losing the natural EOS signal.
+4. **LoRA too aggressive**: r=16 with lr=5e-6 for 50 steps may be too many parameter updates on a small model.
+
+### IIG Signal During Training (Setting B)
+- 400 IIG values computed, 100% positive
+- Mean IIG: 0.856, std: 0.310
+- IIG provided consistent reward signal (frac_reward_zero_std=0 for ALL steps)
+- But couldn't prevent collapse — IIG bonus reinforced correct answers but didn't penalize the "always no" strategy enough
+
+### Lessons Learned
+1. GRPO with binary VQA reward is highly unstable at small scale
+2. Need: higher temperature (1.2+), larger group (8+), shorter training (10-20 steps), or format reward
+3. IIG itself works correctly (100% positive, stable signal) but can't compensate for broken GRPO dynamics
+4. For next attempt: add format reward (penalize truncation), increase temp, reduce steps
+
+### Analysis 1 (Visual)
+Running baseline attention heatmap analysis (INSTRUCTION_VISUAL.md Analysis 1) on pre-training model.
+Trained models are degenerate (always "no") so heatmap comparison is baseline-only.
+
+### Files Created
+- `scripts/block1_minimal_grpo.py` — Block 1 GRPO script
+- `scripts/visual_analysis_1.py` — Analysis 1 attention heatmap
+- `lab/results/block1/A_correct_only_*.json` — Setting A results
+- `lab/results/block1/B_correct_plus_iig_*.json` — Setting B results

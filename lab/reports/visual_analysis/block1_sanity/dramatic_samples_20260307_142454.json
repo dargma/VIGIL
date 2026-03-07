@@ -1,0 +1,72 @@
+[
+  {
+    "rank": 1,
+    "question": "Is there a person in the image?",
+    "answer": "no",
+    "iig": 2.46484375,
+    "correct": true,
+    "generated": "Based on a careful examination of the image provided, there is no person visible.\n\nThe image features:\n- A small, white, curly-haired puppy lying",
+    "attn_kl": 0.9296506129587891,
+    "grid_size": [
+      13,
+      20
+    ],
+    "num_vis_tokens": 260
+  },
+  {
+    "rank": 2,
+    "question": "Is there a car in the image?",
+    "answer": "yes",
+    "iig": 2.287109375,
+    "correct": false,
+    "generated": "Based on a careful examination of the image provided, here is a breakdown of the vehicles present:\n\n-   In the foreground, there is a white and",
+    "attn_kl": 1.0727526121117132,
+    "grid_size": [
+      13,
+      20
+    ],
+    "num_vis_tokens": 260
+  },
+  {
+    "rank": 3,
+    "question": "Is there a person in the image?",
+    "answer": "no",
+    "iig": 2.283203125,
+    "correct": true,
+    "generated": "Based on a thorough examination of the image provided, there is no person visible.\n\nThe image shows a kitchenette or breakroom area with:\n- A",
+    "attn_kl": 0.9777384864720827,
+    "grid_size": [
+      15,
+      20
+    ],
+    "num_vis_tokens": 300
+  },
+  {
+    "rank": 4,
+    "question": "Is there a truck in the image?",
+    "answer": "no",
+    "iig": 2.20703125,
+    "correct": false,
+    "generated": "Based on the image provided, there is a white and purple truck in the foreground.\n\nIt is a van with the \"UNIA EXPRESS\" logo on",
+    "attn_kl": 0.9880199377888963,
+    "grid_size": [
+      13,
+      20
+    ],
+    "num_vis_tokens": 260
+  },
+  {
+    "rank": 5,
+    "question": "Is there a book in the image?",
+    "answer": "no",
+    "iig": 2.201171875,
+    "correct": true,
+    "generated": "Based on a careful examination of the image provided, there is no book visible.\n\nThe image shows a kitchenette or breakroom area with a white microwave",
+    "attn_kl": 1.0081052327615727,
+    "grid_size": [
+      15,
+      20
+    ],
+    "num_vis_tokens": 300
+  }
+]
