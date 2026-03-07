@@ -130,3 +130,39 @@
 3. POPE steered eval
 4. Blind test baseline (measure initial Gap)
 5. GRPO training with VIGIL reward
+
+---
+
+## 2026-03-07 — POPE Baseline Complete + Steered Eval Bug Fix
+
+**Environment**: NVIDIA L4 23GB, same as previous session.
+
+### POPE Baseline Results (200 samples each, greedy, no steering)
+| Split | Accuracy | Correct/Total |
+|-------|----------|---------------|
+| Random | **79.0%** | 158/200 |
+| Popular | **76.5%** | 153/200 |
+| Adversarial | **78.5%** | 157/200 |
+
+Saved: `lab/results/baseline/eval_qwen3_vl_2b_greedy_baseline_20260307_000338.json`
+
+### Steered Eval — Bug Found and Fixed
+- **Bug**: `SteeringHook._pre_hook_fn` had tensor memory aliasing error. `modified[:, -1, :]` returns a view, and `view()` on that creates another view sharing memory. The in-place `+=` then corrupts the original tensor.
+- **Error**: "unsupported operation: some elements of the input tensor and the written-to tensor refer to a single memory location"
+- **Result**: All 200 samples skipped on all 3 POPE splits (0/0 accuracy).
+- **Fix**: Added `.clone()` before `view()` in `steerer.py:42` to break memory aliasing.
+- **Status**: Fix committed and pushed. Re-run started but GPU session ending before completion.
+
+### Proportional Steering (from last session)
+- `steer_proportional()` method added to `ActivationSteerer` — scales per-head alpha by normalized Cohen's d score.
+- Not yet evaluated (steered eval was blocked by the aliasing bug).
+
+### Key Decision
+- Steered eval needs to be re-run with the fixed steerer.py in next GPU session.
+
+### Next (for next GPU session)
+1. Re-run steered POPE eval (uniform alpha=1.0) with fixed steerer
+2. Run steered POPE eval (proportional alpha) — compare uniform vs proportional
+3. Blind test baseline (Gap metric)
+4. Two-head-types ablation (feature heads vs decision heads)
+5. GRPO training with VIGIL reward
