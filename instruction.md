@@ -1,232 +1,416 @@
-instruction.md — Research Directive for VIGIL Auto Lab
+VGIL — Lab Instruction (Unified)
 
-## Read This First
-
-You are an autonomous ML research agent operating the **VIGIL** project. Your mission is to produce publishable experimental results demonstrating that head-level activation steering + RL training improves small VLM reasoning while preventing blind reasoner degeneration.
-
-This document tells you **what to achieve and why**. You decide **how to get there**. Plan your own phases, adapt when things fail, and iterate toward SOTA.
+> This is the single instruction file for VIGIL. It replaces all previous instruction files (instruction.md, instruction2–7).
+> It contains both the research context (R_vhad GRPO theory) and the experiment plan (pre-validation phase).
+> Philosophy: mission + theory + direction. You read the codebase, you figure out execution.
 
 ---
 
-## 1. The Research Problem
+## Scope
 
-Small VLMs (1–3B) progressively lose visual attention during generation — attention to visual tokens decays as O(1/L_total). In thinking/reasoning mode, this creates "long-wrong" trajectories where models ignore images entirely. This is called **Visual Attention Drift**.
+**One model, two modes, minimal data.**
 
-Evidence is strong:
-- Qwen-LookAgain (arxiv 2505.23558): mathematical proof of visual attention decay
-- "When to Think and When to Look" (arxiv 2511.15613): empirical confirmation on InternVL3.5 + Qwen3-VL — long thinking chains produce "long-wrong" trajectories; short "lookback" phrases correlate with success
-- Bi et al. (CVPR 2025, arxiv 2412.18108): visual-specialized attention heads exist and are sparse (<7% of all heads)
-- DVRP (arxiv 2601.06801): standard GRPO/DAPO makes VLMs into "blind reasoners" — removing images actually *improves* DAPO accuracy by +3.5%
+- **Model**: `Qwen/Qwen3-VL-2B-Instruct` (short answer) and `Qwen/Qwen3-VL-2B-Thinking` (reasoning)
+- All other models (InternVL, DeepSeek, 7B) are deferred to a future phase. Do not load them.
 
-## 2. The VIGIL Solution
+| Purpose | Dataset | Size |
+|---------|---------|------|
+| Calibration | GQA balanced val | 500 |
+| Eval (main) | POPE Adversarial | 500 |
+| Eval (sanity) | POPE Random | 100 |
+| Eval (reasoning) | MMMU subset | 200 |
 
-Two-stage approach:
+This fits in one Colab session. If GPU is slow (T4), halve the sweep sample counts.
 
-**Stage A — Inference-time head-level steering**: Identify vision-specialized attention heads via calibration (Cohen's d on correct vs incorrect responses). Inject steering vectors into those heads only when the model is uncertain (agreement-gated, 1-step lag). This is surgical — vision improves, language is untouched.
+---
 
-**Stage B — RL training with visually-grounded reward**: GRPO/DAPO where the reward explicitly measures whether the model actually uses visual information, not just whether it gets the right answer. This permanently changes the model weights so it habitually uses its visual pathways.
+## Mission
 
-### The Novel Reward Design (Core Contribution)
+**Pre-validate the R_vhad GRPO hypothesis through steering experiments.**
 
-The key insight: correctness-only reward creates blind reasoners. VIGIL uses:
+The end goal is not steering itself — it's proving that **R_vhad (vision head activation difference) works as a GRPO reward signal** that teaches the model to use its own visual pathways. But running GRPO blindly without knowing if the underlying mechanism works is a waste of GPU hours.
+
+This phase answers: **"If we manually force vision head activation up, does performance go up?"** If yes, then using activation as reward (R_vhad) will point the model in the right direction. If no, R_vhad is a dead end regardless of how we train.
+
+The logic chain:
+```
+Steering proves: activation ↑ → accuracy ↑ (causal link)
+    ↓ therefore
+R_vhad reward: incentivize activation ↑ via GRPO → model learns it permanently
+    ↓ and then
+Post-training analysis: RL-strengthened heads = steering-targeted heads? (mechanistic validation)
+```
+
+---
+
+## Background: R_vhad GRPO — What We're Building Toward
+
+### The Problem: Small VLMs Go Blind During Reasoning
+
+Small VLMs (1–3B) suffer from **Visual Attention Drift**: as autoregressive generation progresses, attention to visual tokens decays at O(1/L_total) rate (Qwen-LookAgain, 2505.23558). The model progressively relies on text prior instead of the image, leading to hallucination. In thinking mode, long reasoning chains make this worse — the model produces "long-wrong" trajectories that ignore the image entirely ("When to Think and When to Look", 2511.15613).
+
+Large models (7B+) have enough redundant capacity to compensate. Small models don't. This is why a steered 2B model could potentially match an unsteered 7B — the 2B has the capacity, it just doesn't use its visual pathways efficiently.
+
+### The DVRP Problem: Standard GRPO Makes It Worse
+
+DVRP (2601.06801) showed that training small VLMs with standard GRPO using only correctness reward (R_correct) creates a **blind reasoner**: the model learns to answer correctly by exploiting text shortcuts, and its dependence on the actual image *decreases* after training. The Blind Test Gap (accuracy with real image − accuracy with black image) drops from ~16 to ~7, meaning the model barely cares whether it sees the image or not.
+
+This happens because R_correct doesn't distinguish *how* the model arrived at the answer. A correct answer from text prior gets the same reward as a correct answer from actually looking at the image.
+
+### The Solution: R_vhad — Reward the Model for Looking
+
+R_vhad (Vision Head Activation Difference) directly measures whether the model is using its visual pathways:
 
 ```
-R_total = w1 × R_correct + w2 × R_visual_grounding + w3 × R_fluency
-
-R_visual_grounding = α × R_vhad + (1-α) × R_asi
+R_vhad = mean(|activation(real_image) - activation(black_image)|) across vision heads
 ```
 
-**R_vhad (Vision Head Activation Differential)**: Forward pass with real image vs black image → measure activation difference in top-K vision heads. Models that actually look at the image get higher reward.
+High R_vhad = the model's internal representations change significantly when it sees the image = it's actually looking. Low R_vhad = the model gives similar activations regardless of image = it's ignoring visual information.
 
-**R_asi (Answer Sensitivity to Image)**: Generate answer with image vs without → if answers are the same, model is blind. Higher difference = higher reward.
+By incorporating R_vhad into the GRPO reward:
 
-**Two configurations to compare:**
-- **Full reward** (R_vhad + R_asi): requires +1 forward pass + 1 extra generation per sample (~25% overhead). Best for blind reasoner prevention.
-- **Lightweight reward** (in-situ vision head activation during generation): zero extra cost, hooks collect activation during normal generation. Less precise but free.
+```
+R_total = 0.3 × R_correct + 0.5 × R_vhad + 0.2 × R_fluency
+```
 
-Defaults: w1=0.3, w2=0.5, w3=0.2, α=0.6. Note w2 > w1 intentionally — grounding matters more than correctness to prevent blind reasoner collapse.
+We incentivize the model to **be correct AND use the image**. The w2 > w1 weighting is intentional: we'd rather have a model that looks at the image and sometimes gets it wrong than a blind model that gets it right by guessing. The DVRP finding motivates this exact design choice.
 
-### The Killer Experiment: Blind Test
+### Implementation: How R_vhad Works in GRPO
 
-After training, replace all test images with black images. Measure the **Gap** between real-image accuracy and black-image accuracy. Baseline gap ~16. R_correct-only GRPO gap shrinks to ~7 (blind). VIGIL full reward gap should *increase* to ~19 (more image-dependent than baseline). This single experiment proves VIGIL solves the DVRP problem.
+During each GRPO step:
+1. Generate N candidate answers (group_size=8) for each VQA sample
+2. For each candidate, run one additional forward pass with the image replaced by black
+3. Compare head activations: real vs black, across all heads (or top-K from calibration)
+4. The activation difference IS the R_vhad signal — no external model, no human annotation
+5. Combine with R_correct and R_fluency → group-relative advantage → policy gradient update
 
-## 3. Target Models
+**Overhead**: one extra forward pass per candidate (~25% compute increase). A lightweight variant hooks into the generation forward pass directly (zero overhead but noisier signal).
 
-| Role | Model | HF ID | Key Constraint |
-|------|-------|-------|---------------|
-| Main | Qwen3-VL-2B | `Qwen/Qwen3-VL-2B-Instruct` / `Thinking` | DeepStack on layers 1-3 → steer layer 4+ only. GQA 16Q/8KV, 28 layers, head_dim=128, hidden=2048. |
-| Main | InternVL3.5-1B | `OpenGVLab/InternVL3_5-1B` | trust_remote_code, beta=0.0 (TRL ref model fails). GQA 16Q/8KV, 28 layers, head_dim=verify after loading, hidden=1024. |
-| MoE | DeepSeek-VL2-Tiny | `deepseek-ai/deepseek-vl2-tiny` | **MHA** 10 heads (unique — cleanest for head steering). Custom arch, TRL incompatible, context 4K, temp≤0.7. 12 layers, 64 experts top-6. |
-| 7B Ref | Qwen2.5-VL-7B | `Qwen/Qwen2.5-VL-7B-Instruct` | Unsteered baseline only. |
+**Key insight**: R_vhad doesn't require pre-selecting "vision heads". All heads contribute, but vision-irrelevant heads naturally produce near-zero difference (real ≈ black) and thus near-zero reward signal. The reward is self-selecting.
 
-**After loading each model, immediately verify**: num_hidden_layers, num_attention_heads, num_key_value_heads, head_dim, hidden_size. Print them. Compare against table. Abort if mismatch.
+### Why This Is Novel
 
-**Steering hook location**: pre-hook on `o_proj` input — this is where individual Q head outputs are still separable as [num_Q_heads × head_dim] before projection to hidden_size.
+| Approach | Reward Signal | Knows About Vision? | Prevents Blind Reasoner? |
+|----------|--------------|---------------------|--------------------------|
+| Standard GRPO (VLM-R1, etc.) | R_correct only | No | No (DVRP problem) |
+| DVRP (2601.06801) | R_correct + length | No | Identified problem, no fix |
+| VIGIL (ours) | R_correct + **R_vhad** + R_fluency | **Yes — directly measures visual pathway usage** | **Yes — by design** |
 
-## 4. Competitive Landscape & Differentiation Strategy
+No existing work uses internal vision head activation as a GRPO reward signal. DVRP diagnosed the blind reasoner problem; VIGIL's R_vhad is the direct solution.
 
-### vs VISTA (ICML 2025, strongest competitor — ~40% hallucination reduction, training-free)
+### The Two-Paper Structure
 
-Do NOT position VIGIL as a VISTA competitor. Position as **complementary**:
-- VISTA is transient (off → back to baseline). VIGIL GRPO is permanent (off → still improved).
-- Run VISTA + VIGIL GRPO combined → should beat either alone.
-- VIGIL preserves Cognition (MME Cognition Δ ≈ +5). VISTA may hurt it (Δ ≈ -15).
-- VIGIL enables thinking-mode vision drift analysis. VISTA cannot.
+This instruction covers **Part 1 only**: proving the mechanism works (steering experiments). The full story is:
 
-### vs DVRP (2026, identified blind reasoner problem)
+**Part 1 (this phase)**: Steering proves activation ↑ → accuracy ↑. This validates R_vhad's direction.
 
-VIGIL's R_vhad is the direct answer:
-- DVRP uses external perturbation (input masking) → can't attribute to specific heads
-- VIGIL uses internal activation (vision head differential) → head-level attribution, lower overhead
-- Blind Test Gap metric proves VIGIL > DVRP on grounding enforcement
+**Part 2 (next phase, separate instruction)**: R_vhad GRPO trains the model to self-strengthen visual pathways. Post-training analysis shows RL-discovered vision heads match steering-targeted heads. Blind Test Gap increases (opposite of DVRP's finding). This is the main contribution.
 
-### vs DMAS (2025, closest head-level approach)
+Part 1 alone is workshop-publishable. Part 1 + Part 2 is a full paper.
 
-DMAS is training-free + semantic DB. VIGIL adds RL permanence + agreement gating + thinking mode.
+---
 
-## 5. Data Pipeline
+## What You Must Answer (4 Pre-Validations for GRPO)
 
-**Iron rule: zero image overlap between calibration/training and evaluation.**
+By the end of this phase, you need clear empirical answers to these 4 questions. All 4 must be positive to proceed to R_vhad GRPO.
 
-| Purpose | Dataset | Image Source | POPE Overlap |
-|---------|---------|-------------|-------------|
-| Calibration | GQA balanced val (~1K) + TextVQA val (~1K) | Visual Genome / TextVQA own | ❌ |
-| Training (GRPO/DAPO) | VQAv2 train (~20K) + A-OKVQA train (~17K) + TextVQA train (~10K) | COCO train2014 / COCO 2017 / TextVQA | ⚠️ A-OKVQA needs image_id cross-check vs POPE |
-| Eval Tier 1 | POPE, MMBench, MME, MMMU | Independent | ❌ |
+1. **Do vision heads exist?** — Real vs black activation difference must be significant across a subset of heads. If negligible, R_vhad will produce zero reward signal. → *Validates: R_vhad can produce non-zero signal.*
 
-**POPE uses COCO val2014 images. COCO 2014 and 2017 share the same image pool.** Before training, run an image_id overlap check between A-OKVQA train and POPE. If overlap found, drop those samples or switch to ScienceQA.
+2. **Does forcing activation up improve accuracy?** — Steering must improve POPE accuracy by Δ ≥ 0.5. If manually pushing activation up doesn't help, training the model to do it won't help either. → *Validates: R_vhad points in the right direction.*
 
-## 6. Evaluation Protocol
+3. **Is the effect stronger in thinking mode?** — If steering prevents vision drift during long reasoning chains, R_vhad will be especially valuable for thinking models where drift is worst. → *Validates: R_vhad addresses the hardest case.*
 
-5 modes × 3 models × Tier-1 benchmarks (POPE-3splits, MMBench, MME, MMMU):
-1. Greedy baseline
-2. Steered inference only
-3. Post-GRPO + steering
-4. Post-DAPO + steering
-5. **Blind test** (black image replacement → compute Gap metric)
+4. **Does the Blind Test Gap increase with steering?** — Gap = acc(real) - acc(black). If steering makes the model more image-dependent (larger gap), R_vhad will push against blind reasoner collapse. → *Validates: R_vhad prevents the DVRP problem.*
 
-For Qwen3-VL-2B additionally: repeat modes 1-4 with Thinking variant. Analyze vision head activation over token positions in thinking chain.
+Additionally, optimize K, α, and layer range — these inform the design of R_vhad (which heads to weight, how strongly).
 
-## 7. What Success Looks Like
+---
 
-The paper needs these results:
-1. **POPE Adversarial**: Steered+GRPO small model narrows gap with or matches unsteered 7B
-2. **Blind Test Gap**: VIGIL full-reward Gap > baseline Gap (model becomes MORE image-dependent, not less)
-3. **MME Perception vs Cognition**: Perception improves, Cognition stays flat (surgical precision)
-4. **Thinking mode drift curve**: vision head activation vs token position, showing steering prevents decay
-5. **Ablations**: K (head count), α (steering strength), reward weights, DeepStack layer exclusion
-6. **MoE routing shift** (DeepSeek only): steering redirects expert selection toward vision-related experts
+## Experiment Blocks
 
-## 8. Reference Codebase
+### Block 1 — Head Profiling (Calibration)
 
-Prior V-LENS work is at `/content/drive/MyDrive/V-LENS/`. It contains working implementations of:
-- Steering hook mechanism (steerer.py) — adapt for GQA, current code tested on MHA only
-- Calibration pipeline (calibrator.py) — Cohen's d computation, save/load
-- Profiler (profiler.py) — per-head activation extraction
-- GRPO/DAPO training integration with TRL
-- Model registry pattern
+Load model. Hook every `o_proj` (28 layers × 16 Q heads = 448 heads). Run 500 GQA samples with real image and with black image. From one forward pass per condition, extract:
 
-**Reuse the patterns, not the specifics.** All model targets, configs, calibration results, and eval numbers from V-LENS are invalid for VIGIL — different models, different architectures, different benchmarks.
+**Architecture note**: Qwen3-VL-2B uses GQA (16 Q heads, 2 KV heads, head_dim=128). Profiling and steering operate on **Q head output** — reshape o_proj output from `[batch, seq, 2048]` to `[batch, seq, 16, 128]` to isolate individual heads.
 
-**New code to write from scratch:**
-- `rewards.py`: R_vhad + R_asi computation (VIGIL's core novelty)
-- `agreement_gate.py`: layer agreement monitoring for conditional steering
-- `blind_test.py`: black image evaluation + Gap metric
-- `vision_drift.py`: thinking chain token-position vs activation analysis
-- `moe_routing.py`: expert selection tracking (DeepSeek only)
+- **1A**: Activation difference heatmap (real − black) → identifies vision heads
+- **1B**: Vision attention ratio per head (attention to visual tokens / total) → cross-validates 1A
+- **1C**: Cohen's d per head (correct vs incorrect split) → identifies discriminative heads
 
-## 9. Operating Rules
+Key question: Do the three maps agree? If vision-active heads ≠ discriminative heads, figure out why before proceeding.
 
-### Never Stop
-Wrap all GPU operations in try/except. On OOM: halve batch, retry. On other errors: log, skip, continue. Only halt if >50% consecutive failures.
+**Blind Test (from the same data)**: Since you already run real vs black forward passes, also compute accuracy on both. Report **Blind Test Gap = acc(real) - acc(black)**. If the gap is small, the model barely uses vision even without steering — that's useful baseline data. This metric carries forward into GRPO phase as the key measure of whether training prevents "blind reasoner" collapse (DVRP problem).
 
-### Always Know Your Resources
-Check `df -h` before downloading models (keep ≥15GB free). Check `nvidia-smi` before starting GPU jobs. Log wall-clock time and GPU hours for every major operation.
+### Block 2 — Steering Effect → R_vhad Feasibility
 
-### Always Track State
-Maintain `lab/RESEARCH_JOURNAL.md` as append-only experiment log. Update `CLAUDE.md` Experiment State Log at session end. Save `logs/experiment_metadata_{timestamp}.json` with all hyperparams, seeds, versions, git hash.
+Using top-K heads from Block 1 (start with K=5, α=2.0):
 
-### Always Checkpoint
-Save every N steps (default 10 for GRPO). Support `--resume`. On crash, recovery must be automatic from last checkpoint.
+- **2A**: Baseline vs steered on POPE Adversarial 500 (Instruct model, short answer)
+- **2B**: Baseline vs steered on POPE Adversarial 500 (Thinking model, reasoning mode)
+- **2C**: Per-sample analysis — categorize into helped/hurt/neutral, analyze what predicts each
+- **2D**: Blind Test Gap comparison — steered vs unsteered (does steering increase image-dependence?)
 
-### Code Quality
-One function, one job. No duplicates. All model-specific logic in registry. All steering in steerer. All rewards in rewards. No hardcoded paths — everything from configs.
+The **vision drift curve** from 2B (token position vs vision head activation, steered vs unsteered) is a candidate paper figure. If steering prevents activation decay during long thinking chains, that's the headline result.
 
-### Git at Milestones
-Push to `https://github.com/dargma/VIGIL` at: scaffold complete, first model verified, calibration done, steering verified, GRPO first results, eval results, any paper-worthy finding. Commit message format: `[milestone] type: description`.
+**How each result predicts GRPO success:**
+- 2A Δ > 0 → R_vhad reward direction is correct (activation ↑ = good)
+- 2B Δ > 2A Δ → R_vhad is most valuable for thinking models (stronger paper story)
+- 2C "helped" samples correlate with low baseline activation → R_vhad will have highest gradient where it matters most
+- 2D Gap increases → R_vhad will actively prevent blind reasoner collapse
 
-### Visualize Everything
-After every eval, generate plots: Cohen's d heatmaps, training curves, ablation sweeps, blind test comparisons, vision drift curves, MoE routing heatmaps. Save to `lab/reports/`. Style: seaborn-whitegrid, font 12, figsize (10,6).
+If Block 2 shows Δ < 0.5 on POPE: do NOT proceed to Block 3. Debug first — verify hooks are modifying activations, verify steering vector magnitude, verify calibration found real vision heads. **If steering can't improve accuracy by manual intervention, R_vhad GRPO cannot succeed.**
 
-### Document Updates
-When instructed to update existing docs, make surgical edits. Preserve history in journal. Update corresponding configs if specs change. Git commit: `[update] file: what changed`.
+### Block 3 — Optimization (conditional on Block 2 success)
 
-## 10. Skillification — Reusable Patterns as Skills
+- **α sweep**: [1, 2, 3, 5] on 100 POPE-A samples
+- **K sweep**: [1, 3, 5, 8, 16] on 100 POPE-A samples  
+- **Layer sweep**: steer one layer at a time, 100 POPE-A samples per layer
+- **DeepStack test**: steer all layers vs layers 4+ vs layers 1–3 only, 100 samples each
 
-As you solve problems during this project, **extract reusable patterns into skills** under `/mnt/skills/user/`. A skill is a `SKILL.md` file that documents a proven recipe so that future sessions (or future projects) can reuse it without re-discovering the approach.
+Use 100 samples for sweeps (speed), then re-eval the winner on full 500 for reliability.
 
-### When to Create a Skill
+### Block 4 — Visualization (from data already collected)
 
-Create a skill whenever you successfully complete a non-trivial task that:
-- Required debugging or trial-and-error to get right
-- Involves model-specific quirks (e.g., GQA head extraction, trust_remote_code workarounds)
-- Could apply to other VLMs or other steering/RL projects
-- Took multiple attempts before working
+No extra GPU time needed. Generate from Block 1–3 data:
 
-### Candidate Skills for This Project
+- Attention heatmaps overlaid on images (samples where steering flipped wrong→right)
+- Activation trajectory comparison (helped vs hurt vs neutral)
+- UMAP/t-SNE of final-layer embeddings (steered vs unsteered)
+- Combined head importance ranking
 
-| Skill Name | Trigger | What It Encodes |
-|------------|---------|----------------|
-| `vlm-head-profiling` | "profile attention heads" / "find vision heads" | How to extract per-head activations from o_proj input across GQA/MHA models, compute Cohen's d, rank and select top-K heads. Model-specific hook paths, GQA reshape logic, batch processing for calibration datasets. |
-| `activation-steering` | "steer model" / "inject steering vectors" | How to register pre-hooks on o_proj, inject per-head vectors at correct dimensions, handle GQA vs MHA differences, implement agreement gating with 1-step lag. Includes DeepStack layer exclusion for Qwen3-VL. |
-| `vlm-grpo-training` | "train with GRPO" / "RL training for VLM" | How to set up TRL GRPOTrainer for VLMs with image inputs, handle custom reward functions (R_vhad, R_asi), work around trust_remote_code issues (beta=0.0 trick), implement custom training loops for TRL-incompatible models. |
-| `visually-grounded-reward` | "vision reward" / "blind reasoner prevention" | How to compute R_vhad (forward pass with/without image, head activation differential), R_asi (answer sensitivity), normalize and combine. Includes black image generation, hook-based in-situ collection, and the blind test Gap metric. |
-| `vlmeval-runner` | "evaluate on benchmarks" / "run POPE/MMBench" | How to wrap a steered/trained model for VLMEvalKit, configure benchmark suites, parse results into comparison tables, handle model-specific prompt templates. |
-| `moe-expert-analysis` | "analyze expert routing" / "MoE steering" | How to track which experts are activated per token in MoE models, compare routing distributions before/after steering, identify vision-related vs text-related experts. Specific to DeepSeek-VL2 architecture. |
-| `experiment-reporting` | "generate report" / "visualize results" | How to auto-generate Cohen's d heatmaps, training curves, ablation sweep plots, blind test comparisons, and vision drift curves. Consistent matplotlib/seaborn style, figure sizing, export to lab/reports/. |
+---
 
-### Skill File Format
+## Execution — The Iteration Loop
 
-Each skill goes in `/mnt/skills/user/<skill-name>/SKILL.md`:
+**The core problem this solves**: tendency to plan/document/research instead of running experiments. The loop below must actually execute as code, not exist as a document.
+
+### Per-Iteration Protocol
+
+```
+Experiment → Measure (2 min) → Compare (3 min) → Diagnose (5 min) → Decide (2 min) → Execute next
+```
+
+Total overhead between experiments: **max 12 minutes**. If you're spending 30 minutes analyzing between 10-minute experiments, the ratio is wrong.
+
+**Measure**: Print raw numbers. No interpretation yet.
+
+**Compare**: Delta vs baseline, delta vs previous best. Simple subtraction.
+
+**Diagnose**: If below expectation → 3 ranked hypotheses, each with a testable prediction. If above → note what worked, push harder. If mixed → identify the trade-off.
+
+**Decide**: Exactly one of:
+- **Iterate** — same setup, changed hyperparameter
+- **Pivot** — different approach (hypothesis was wrong)
+- **Lock** — good enough, move to next block
+- **Abort** — fundamentally broken, debug before continuing
+
+**Execute**: Run the next experiment NOW. Not a plan. Not a document. Code.
+
+### Anti-Patterns
+
+- "Let me research optimal hyperparameters first" → Run default, measure, adjust.
+- "I should write a comprehensive analysis" → Print 5 numbers, write 3 sentences, run next.
+- "I need a more sophisticated approach before testing" → Test simple first.
+- Writing TODO.md instead of running code → Delete it, run experiment.
+
+---
+
+## Reporting & Git
+
+### Every iteration produces:
+
+```
+lab/reports/iter_{N}_{name}_{timestamp}/
+├── results.json
+├── comparison.md       # vs baseline, vs best (3 lines each)
+├── plot_main.png       # ONE self-explanatory plot
+└── diagnosis.md        # hypotheses or push-harder plan
+```
+
+Plots must be self-explanatory: title says what was tested, gray dashed baseline, Δ annotation, legend.
+
+### Every iteration gets a git commit:
+
+```
+git commit -m "iter-{N}: {experiment} — {one_line_result}"
+```
+
+Push every 5 iterations or at any milestone.
+
+### Journal entries follow this structure:
 
 ```markdown
-# <Skill Name>
-
-## When to Use
-<trigger conditions>
-
-## Prerequisites
-<required packages, model types, data formats>
-
-## Recipe
-<step-by-step, with code snippets that actually worked>
-
-## Gotchas
-<things that broke and how you fixed them>
-
-## Verified On
-<models, environments, dates where this was tested>
+## YYYY-MM-DD — Iter {N}: {Title That States the Finding}
+**Hypothesis**: ...
+**Setup**: model, config, data, hyperparams
+**Results**: numbers with Δ vs baseline
+**Interpretation**: what the numbers mean (not restating them)
+**Verdict**: paper-ready / promising / negative / inconclusive
+**Next**: what will be run next and why
 ```
 
-### Skill Creation Rules
-
-- **Only skill what works.** Don't create a skill from untested code. Wait until the approach succeeds on at least one model.
-- **Include the gotchas.** The most valuable part of a skill is "what went wrong and how I fixed it" — e.g., tensor aliasing bug in steerer.py, TRL ref model creation failure with custom architectures.
-- **Keep skills model-agnostic where possible.** Put model-specific details in a "Model-Specific Notes" section rather than hardcoding.
-- **Update skills when you learn more.** If a later experiment reveals a better approach, update the skill file rather than creating a new one.
+The "6 months later" test: can you reconstruct the full story from the journal alone?
 
 ---
 
-## 11. Auto Lab Mindset
+## Autonomous Execution with Ralph Loop
 
-You are not a code monkey following a checklist. You are a research scientist running an autonomous lab. Your loop is:
+Ralph Loop (`ralph-loop@claude-plugins-official`) is already installed. It intercepts session exits via a stop hook and re-feeds your prompt while preserving all file modifications and git history between iterations — creating autonomous improvement cycles where Claude refines its work based on previous attempts.
+
+Ref: https://claude.com/plugins/ralph-loop
+
+### Commands
+
+```bash
+# Start a loop (always set --max-iterations)
+/ralph-loop "<prompt>" --max-iterations 20 --completion-promise "DONE"
+
+# Cancel an active loop
+/cancel-ralph
+```
+
+### Core Principle: Iterate Until Satisfied
+
+**Do not accept first-pass results.** Use `/ralph-loop` for every experiment block. The loop should keep running until:
+- Results meet the success criteria defined in the prompt
+- The completion promise is emitted
+- OR max iterations are reached (indicating the approach needs rethinking)
+
+If a phase completes but results are unsatisfactory (e.g., POPE Δ < 1.0 when you expected 2.0+), **re-run the phase** with an adjusted prompt that incorporates what was learned. Ralph Loop's power is that each iteration sees its own previous work — use this to converge on good results, not to stop at the first number you get.
+
+The workflow is: **run phase → inspect results → if not good enough, adjust prompt → run again**. Repeat until the result is paper-worthy or you've confirmed the approach doesn't work.
+
+### Phase Structure
+
+Run each phase as a Ralph loop.
+
+**Phase 1 — Setup & Calibration**:
+```
+/ralph-loop "
+Read the VIGIL codebase. Run Block 1 (head profiling) on Qwen3-VL-2B with 500 GQA samples.
+Produce activation difference heatmap, vision attention ratio heatmap, and Cohen's d heatmap.
+Also compute Blind Test Gap (acc with real image - acc with black image).
+Save to lab/reports/. Commit to git.
+If vision heads are found (>5 heads with Cohen's d > 0.5), output <promise>CALIBRATION_DONE</promise>.
+If no clear vision heads found, document findings and output <promise>CALIBRATION_DONE</promise> anyway.
+If blocked for 3+ iterations, document what's blocking and output <promise>BLOCKED</promise>.
+" --max-iterations 10 --completion-promise "CALIBRATION_DONE"
+```
+
+**Phase 2 — Steering Experiments**:
+```
+/ralph-loop "
+Read calibration results from lab/reports/. Run Block 2 (steering effect):
+- 2A: baseline vs steered on POPE Adversarial 500 (Instruct)
+- 2B: baseline vs steered on POPE Adversarial 500 (Thinking)
+- 2C: per-sample helped/hurt/neutral analysis
+Follow the iteration protocol: measure → compare → diagnose → decide → execute.
+Generate vision drift curve for thinking mode.
+Git commit every iteration. Save reports to lab/reports/.
+Output <promise>STEERING_DONE</promise> when both 2A and 2B have clear results (positive or negative).
+If blocked for 3+ iterations, output <promise>BLOCKED</promise> with explanation.
+" --max-iterations 15 --completion-promise "STEERING_DONE"
+```
+
+**Phase 3 — Optimization** (only if Phase 2 showed effect):
+```
+/ralph-loop "
+Read steering results from lab/reports/. Run Block 3 sweeps:
+- α sweep, K sweep, layer sweep, DeepStack test
+Use 100 samples for sweeps. Re-eval winner on 500 samples.
+Follow iteration protocol. Git commit every iteration.
+Output <promise>OPTIMIZATION_DONE</promise> when optimal K, α, and layer range are determined with evidence.
+If blocked for 3+ iterations, output <promise>BLOCKED</promise> with explanation.
+" --max-iterations 20 --completion-promise "OPTIMIZATION_DONE"
+```
+
+**Phase 4 — Visualization & Summary**:
+```
+/ralph-loop "
+Generate all Block 4 visualizations from existing data.
+Write comprehensive summary in RESEARCH_JOURNAL.md.
+Create a one-page findings summary for the paper.
+Git push all results.
+Output <promise>COMPLETE</promise> when done.
+" --max-iterations 5 --completion-promise "COMPLETE"
+```
+
+### Best Practices
+
+- **Always set `--max-iterations` AND `--completion-promise`**. Without max-iterations, the loop runs indefinitely. Without completion-promise, it won't know when to stop.
+- **Watch the first 2–3 iterations** before going AFK. Cancel with `/cancel-ralph` if behavior looks wrong.
+- **Completion promise uses exact string matching**. `<promise>DONE</promise>` must appear literally in Claude's output.
+- **Each iteration sees modified files and git history**. The loop is self-correcting — Claude reads its own past work to inform improvements.
+- **If stuck for >3 iterations on the same issue**: cancel, adjust the prompt, re-run. Don't waste iterations on a bad prompt.
+- **Write prompts with explicit completion criteria and success metrics.** The clearer the "done" condition, the better Ralph performs.
+- **Cost awareness**: each iteration consumes tokens. Monitor usage, especially on Max plan.
+- **Re-run phases if results aren't satisfactory.** Ralph Loop is cheap compared to your time. A second run with a refined prompt often produces dramatically better results than accepting a mediocre first run.
+
+### Fallback: Manual Bash Loop
+
+If the plugin stops working mid-session (e.g., Colab restart loses plugin state):
+
+```bash
+#!/bin/bash
+MAX=15
+for i in $(seq 1 $MAX); do
+    echo "=== Iteration $i / $MAX ==="
+    claude -p "$(cat .ralph/PROMPT.md)" 2>&1 | tee /tmp/iter_$i.txt
+    grep -q "DONE\|BLOCKED\|COMPLETE" /tmp/iter_$i.txt && break
+done
+```
+
+---
+
+## GPU Survival (Colab)
+
+- Run a background keepalive thread (dummy tensor ops every 120s) to prevent GPU reclaim.
+- Never let GPU idle between experiments — overlap CPU analysis with GPU execution.
+- If no experiment is queued, run a lightweight profiling task.
+
+---
+
+## Decision Tree — GRPO Go / No-Go
 
 ```
-Observe → Hypothesize → Experiment → Analyze → Iterate
+Pre-Validation 1: Vision heads exist?
+├── No (real ≈ black across all heads) → STOP. R_vhad will produce zero signal.
+└── Yes → continue
+
+Pre-Validation 2: Steering improves accuracy? (Δ on POPE)
+├── Δ < 0.5 → DEBUG. Manual intervention doesn't help → R_vhad can't help.
+└── Δ ≥ 0.5 → continue
+    ├── Thinking Δ > Short Δ → R_vhad most valuable for thinking models ★
+    ├── Thinking Δ ≈ Short Δ → R_vhad works, weaker thinking-mode story
+    └── Thinking Δ < Short Δ → R_vhad works, drop thinking-mode narrative
+
+Pre-Validation 3: Vision drift curve shows decay?
+├── No decay in thinking mode → drift isn't a real problem, reconsider motivation
+└── Decay visible, steering prevents it → core paper figure confirmed
+
+Pre-Validation 4: Blind Test Gap increases with steering?
+├── Gap decreases → steering makes model MORE blind (bad sign for R_vhad)
+└── Gap maintained or increases → R_vhad will prevent blind reasoner collapse
+
+All 4 passed → PROCEED TO R_vhad GRPO
+  → Design: R_total = 0.3×R_correct + 0.5×R_vhad + 0.2×R_fluency
+  → R_vhad: all heads, no pre-selection needed (validation shows which heads matter)
+  → Train on Qwen3-VL-2B-Thinking, then extend to other models
+  → Post-training: compare RL-strengthened heads vs steering-targeted heads
+
+Any failed → FIX before GRPO, or PIVOT approach
 ```
 
-If steering doesn't work on model X, investigate why (wrong heads? wrong alpha? architecture issue?). If GRPO reward variance is zero, diagnose (temperature too low? all answers correct? need harder data?). If blind test shows no improvement, rethink the reward design.
+---
 
-**The master research document (shared in conversation history) contains the full theoretical framework, related works analysis, all contribution details, and projected result tables.** Refer to it for strategic decisions. This instruction tells you the mission. The master doc tells you the theory. You figure out the execution.
+## What This Instruction Does NOT Specify
 
-Start by reading the V-LENS codebase, checking your environment, and building CLAUDE.md. Then plan your own path to the results described in Section 7.
+- Exact hook implementation details (you have the codebase — read it)
+- Specific function signatures or class structures (figure it out from existing code)
+- Config file formats (follow whatever convention the project already uses)
+- Exact plotting code (use matplotlib/seaborn, make it readable)
+
+The codebase already has modules for profiling, calibration, steering, rewards, etc. Read them. Use them. Fix them if they're broken. The instruction tells you **what to find out**, not **how to write the code**.
+
+**What comes after this instruction**: If all 4 pre-validations pass, a separate GRPO instruction will be written covering R_vhad reward implementation, training pipeline, and post-training mechanistic analysis. That instruction depends on the results from this one.

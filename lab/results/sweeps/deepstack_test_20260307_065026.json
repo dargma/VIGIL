@@ -1,0 +1,22 @@
+{
+  "baseline": 31.0,
+  "configs": {
+    "all_layers": {
+      "acc": 32.0,
+      "n_hooks": 20
+    },
+    "layers_4_plus": {
+      "acc": 32.0,
+      "n_hooks": 15
+    },
+    "layers_1_3_only": {
+      "acc": 31.0,
+      "n_hooks": 5
+    },
+    "layers_8_plus": {
+      "acc": 32.0,
+      "n_hooks": 6
+    }
+  },
+  "n_samples": 100
+}

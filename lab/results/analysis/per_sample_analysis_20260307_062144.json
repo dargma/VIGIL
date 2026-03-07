@@ -1,0 +1,42 @@
+{
+  "n_helped": 4,
+  "n_hurt": 0,
+  "n_neutral": 196,
+  "n_total": 200,
+  "net_effect": 4,
+  "helped_samples": [
+    {
+      "idx": 0,
+      "question": "Is there a snowboard in the image?",
+      "base_pred": "Based on the image provided, yes, there is a snowboard.\n\nThe person in the image is",
+      "steer_pred": "Yes, there is a snowboard in the image.",
+      "gt": "yes"
+    },
+    {
+      "idx": 108,
+      "question": "Is there a sink in the image?",
+      "base_pred": "Based on the provided image, yes, there is a sink.\n\nIt is located on the right side",
+      "steer_pred": "Yes, there is a sink in the image. It is located on the right side of the bathroom",
+      "gt": "yes"
+    },
+    {
+      "idx": 124,
+      "question": "Is there a sandwich in the image?",
+      "base_pred": "Based on the image provided, yes, there is a sandwich.\n\nThe image shows a white square plate",
+      "steer_pred": "Yes, there is a sandwich in the image. It is a long, crusty baguette",
+      "gt": "yes"
+    },
+    {
+      "idx": 172,
+      "question": "Is there a person in the image?",
+      "base_pred": "Based on a detailed analysis of the image, we can identify the following:\n\n- The image is taken",
+      "steer_pred": "Yes, there is a person in the image. The reflection in the car's side mirror shows a",
+      "gt": "yes"
+    }
+  ],
+  "hurt_samples": [],
+  "gt_distribution": {
+    "yes": 100,
+    "no": 100
+  }
+}

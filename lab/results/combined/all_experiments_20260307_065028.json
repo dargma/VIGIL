@@ -1,0 +1,107 @@
+{
+  "blind_test_baseline": {
+    "acc_real": 26.400000000000002,
+    "acc_black": 0.0,
+    "gap": 26.400000000000002,
+    "n_samples": 500,
+    "model": "qwen3_vl_2b",
+    "timestamp": "2026-03-07T05:56:43.006719",
+    "mode": "baseline"
+  },
+  "blind_test_steered": {
+    "acc_real": 31.8,
+    "acc_black": 0.0,
+    "gap": 31.8,
+    "n_samples": 500,
+    "model": "qwen3_vl_2b",
+    "timestamp": "2026-03-07T06:14:32.053187",
+    "mode": "steered"
+  },
+  "per_sample": {
+    "n_helped": 4,
+    "n_hurt": 0,
+    "n_neutral": 196,
+    "n_total": 200,
+    "net_effect": 4,
+    "helped_samples": [
+      {
+        "idx": 0,
+        "question": "Is there a snowboard in the image?",
+        "base_pred": "Based on the image provided, yes, there is a snowboard.\n\nThe person in the image is",
+        "steer_pred": "Yes, there is a snowboard in the image.",
+        "gt": "yes"
+      },
+      {
+        "idx": 108,
+        "question": "Is there a sink in the image?",
+        "base_pred": "Based on the provided image, yes, there is a sink.\n\nIt is located on the right side",
+        "steer_pred": "Yes, there is a sink in the image. It is located on the right side of the bathroom",
+        "gt": "yes"
+      },
+      {
+        "idx": 124,
+        "question": "Is there a sandwich in the image?",
+        "base_pred": "Based on the image provided, yes, there is a sandwich.\n\nThe image shows a white square plate",
+        "steer_pred": "Yes, there is a sandwich in the image. It is a long, crusty baguette",
+        "gt": "yes"
+      },
+      {
+        "idx": 172,
+        "question": "Is there a person in the image?",
+        "base_pred": "Based on a detailed analysis of the image, we can identify the following:\n\n- The image is taken",
+        "steer_pred": "Yes, there is a person in the image. The reflection in the car's side mirror shows a",
+        "gt": "yes"
+      }
+    ],
+    "hurt_samples": [],
+    "gt_distribution": {
+      "yes": 100,
+      "no": 100
+    }
+  },
+  "alpha_sweep": {
+    "baseline": 31.0,
+    "alphas": {
+      "0.5": 32.0,
+      "1.0": 32.0,
+      "2.0": 33.0,
+      "3.0": 36.0,
+      "5.0": 41.0
+    },
+    "n_samples": 100
+  },
+  "k_sweep": {
+    "baseline": 31.0,
+    "ks": {
+      "1": 30.0,
+      "3": 31.0,
+      "5": 31.0,
+      "8": 32.0,
+      "16": 32.0,
+      "20": 32.0
+    },
+    "n_samples": 100
+  },
+  "deepstack": {
+    "baseline": 31.0,
+    "configs": {
+      "all_layers": {
+        "acc": 32.0,
+        "n_hooks": 20
+      },
+      "layers_4_plus": {
+        "acc": 32.0,
+        "n_hooks": 15
+      },
+      "layers_1_3_only": {
+        "acc": 31.0,
+        "n_hooks": 5
+      },
+      "layers_8_plus": {
+        "acc": 32.0,
+        "n_hooks": 6
+      }
+    },
+    "n_samples": 100
+  }
+}
