@@ -1,0 +1,8 @@
+{
+  "baseline": 77.0,
+  "steered_1.0": 78.0,
+  "steered_3.0": 76.0,
+  "delta_1.0": 1.0,
+  "delta_3.0": -1.0,
+  "n_samples": 100
+}

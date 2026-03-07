@@ -1,0 +1,9 @@
+{
+  "acc_real": 78.4,
+  "acc_black": 50.0,
+  "gap": 28.400000000000006,
+  "n_samples": 500,
+  "model": "qwen3_vl_2b",
+  "timestamp": "2026-03-07T07:41:32.725223",
+  "mode": "steered_fixed"
+}

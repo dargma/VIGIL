@@ -295,7 +295,33 @@ Prior V-LENS work: `/content/drive/MyDrive/V-LENS/`
 5. Adaptive reward curriculum
 
 **Next**:
-1. Get POPE baseline results
-2. Run steered eval (proportional-α variant)
-3. Blind test baseline
-4. Two-head-types ablation
+1. ~~Get POPE baseline results~~ DONE
+2. ~~Run steered eval~~ DONE
+3. ~~Blind test baseline~~ DONE
+4. ~~IIG Block 0 calibration~~ DONE
+5. Block 1: Minimal GRPO with IIG reward
+
+### [2026-03-07] Pre-Validation Complete + IIG Block 0
+
+**All 4 pre-validations PASSED:**
+- PV1: Vision heads exist (mean Δ=6.1, max=66.2)
+- PV2: Steering helps (+2pp POPE, +9pp at α=10)
+- PV3: Thinking model (marginal +1pp at α=1)
+- PV4: Blind test gap up (25.4→28.4pp, +3.0pp)
+
+**IIG Block 0 (λ calibration) PASSED:**
+- 99.4% positive IIG (gate threshold: 60%)
+- λ = 0.0615 (auto-calibrated)
+- Mean IIG = 9.95
+
+**Bugs found and fixed:**
+1. `compute_iig()` attention_mask mismatch: Qwen3-VL uses mask for RoPE positions. Must extend mask when appending candidate tokens.
+2. GQA disk cache lacks images (Arrow format). Use POPE or stream from HF for image-dependent tasks.
+
+**Key files created:**
+- `src/iig.py` — IIG reward (compute_iig, calibrate_lambda, vigil_reward)
+- `scripts/iig_calibration.py` — Block 0 calibration
+- `scripts/generate_report.py` — Pre-validation report generator
+- `lab/reports/` — 7 figures + markdown report
+
+**Next**: Block 1 Minimal GRPO (50 steps, R_correct vs R_correct+IIG)

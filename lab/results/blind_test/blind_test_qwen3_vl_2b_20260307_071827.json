@@ -1,0 +1,9 @@
+{
+  "acc_real": 75.4,
+  "acc_black": 50.0,
+  "gap": 25.400000000000006,
+  "n_samples": 500,
+  "model": "qwen3_vl_2b",
+  "timestamp": "2026-03-07T07:18:27.821482",
+  "mode": "baseline_fixed"
+}

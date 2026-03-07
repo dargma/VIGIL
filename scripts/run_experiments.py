@@ -49,7 +49,16 @@ def check_correct(prediction, ground_truth, q_type="yesno"):
     pred = prediction.strip().lower()
     gt = ground_truth.strip().lower()
     if q_type == "yesno":
-        pred_yn = "yes" if "yes" in pred[:10] else ("no" if "no" in pred[:10] else "")
+        has_yes = "yes" in pred
+        has_no = "no" in pred
+        if has_yes and has_no:
+            pred_yn = "yes" if pred.index("yes") < pred.index("no") else "no"
+        elif has_yes:
+            pred_yn = "yes"
+        elif has_no:
+            pred_yn = "no"
+        else:
+            pred_yn = ""
         return pred_yn == gt
     return pred.startswith(gt[:5]) if gt else False
 

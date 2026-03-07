@@ -101,7 +101,18 @@ def _check_correct(prediction: str, ground_truth: str, q_type: str = "yesno") ->
     gt = ground_truth.strip().lower()
 
     if q_type == "yesno":
-        pred_yn = "yes" if "yes" in pred[:10] else ("no" if "no" in pred[:10] else "")
+        # Model often outputs verbose responses like "Based on the image, yes..."
+        # Search full response for yes/no, prioritize earlier occurrence
+        has_yes = "yes" in pred
+        has_no = "no" in pred
+        if has_yes and has_no:
+            pred_yn = "yes" if pred.index("yes") < pred.index("no") else "no"
+        elif has_yes:
+            pred_yn = "yes"
+        elif has_no:
+            pred_yn = "no"
+        else:
+            pred_yn = ""
         return pred_yn == gt
 
     elif q_type == "mc":
