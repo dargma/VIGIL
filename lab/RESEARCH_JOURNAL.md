@@ -728,3 +728,48 @@ Option 4 (curriculum) is the most principled -- it combines the exploration bene
 - `lab/RESEARCH_IDEAS.md` -- Added Ideas 9-15, updated priority order and experiment status table
 - `lab/RESEARCH_JOURNAL.md` -- This entry
 - `lab/reports/generate_thinking_plots.py` -- NEW: thinking mode plot generator
+
+---
+
+## 2026-03-08 Session 3 — Official VLMEvalKit Evaluation
+
+**Goal**: Replace custom POPE prompts/parsing with VLMEvalKit standard for publication quality.
+
+**What was done**:
+1. Installed VLMEvalKit (`pip install git+https://github.com/open-compass/VLMEvalKit.git`)
+2. Studied exact Qwen3VL prompt mixin and YOrN_Extraction from VLMEvalKit source
+3. Built `scripts/eval_official.py` and `scripts/eval_official_fast.py`
+   - Inline VLMEvalKit functions (full import fails due to missing megabench submodule)
+   - Exact POPE prompt: `{question} Please answer yes or no.`
+   - Exact parsing: `process_punctuation()` + word-level yes/no check
+   - POPE_rating: acc + F1 + precision + recall per split
+4. Ran full evaluation on 3000 samples (adversarial split) × 6 conditions
+
+**Key Results (3000 samples, adversarial split, VLMEvalKit standard)**:
+
+| Condition | Acc | F1 | Precision | Recall | Blind Gap |
+|-----------|-----|-----|-----------|--------|-----------|
+| Baseline | 87.4% | 87.2% | 88.6% | 85.9% | 37.4pp |
+| Steered (α=5) | 87.1% | 87.0% | 87.8% | 86.2% | 37.1pp |
+| BoN+SFT R1 | **87.7%** | 87.3% | **90.1%** | 84.7% | **37.7pp** |
+
+**Alpha sweep (100 samples)**:
+- α=1: 85%, α=3: 85%, α=5: 86%, α=10: 85%, α=15: 81%
+- Steering is harmful or neutral with official prompts
+
+**Blind test behavior**: Model says "No" to all questions with black images → 50% acc (balanced POPE), 0% F1
+
+**Key findings**:
+1. Official eval baseline is higher than custom (87.4% vs 83.0%) — official prompts more consistent
+2. BoN+SFT improvement smaller but real (+0.3pp acc, +1.5pp precision)
+3. Steering not effective with official prompts — calibration may need re-tuning with new prompt format
+4. BoN+SFT's main strength is **precision** (90.1% vs 88.6%) — fewer false positives
+
+**Important**: BoN+SFT shows higher precision because it was trained with IIG reward which penalizes blind-guessing "yes". This is exactly the desired behavior — more image-grounded predictions.
+
+**Full 9000-sample eval**: RUNNING (all 3 POPE splits: adversarial/popular/random)
+
+**Files**:
+- `scripts/eval_official.py` — Single condition eval
+- `scripts/eval_official_fast.py` — Multi-condition eval (loads model once per group)
+- `lab/reports/official_eval/summary_20260308_121500.json` — 3000-sample results

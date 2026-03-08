@@ -1,0 +1,40 @@
+{
+  "timestamp": "20260308_130440",
+  "n_samples": 9000,
+  "conditions": {
+    "baseline": {
+      "acc": 89.57777777777778,
+      "f1": 89.16608916608917,
+      "precision": 92.83309283309283,
+      "recall": 85.77777777777777,
+      "n": 9000,
+      "n_unknown": 0,
+      "blind_gap": 39.57777777777778
+    },
+    "baseline_blind": {
+      "acc": 50.0,
+      "f1": 0.0,
+      "precision": 0.0,
+      "recall": 0.0,
+      "n": 9000,
+      "n_unknown": 0
+    },
+    "bon_r1": {
+      "acc": 89.5111111111111,
+      "f1": 88.97711349836524,
+      "precision": 93.75,
+      "recall": 84.66666666666667,
+      "n": 9000,
+      "n_unknown": 0,
+      "blind_gap": 39.511111111111106
+    },
+    "bon_r1_blind": {
+      "acc": 50.0,
+      "f1": 0.0,
+      "precision": 0.0,
+      "recall": 0.0,
+      "n": 9000,
+      "n_unknown": 0
+    }
+  }
+}

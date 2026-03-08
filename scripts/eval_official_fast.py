@@ -163,7 +163,11 @@ def run_pope(model, processor, dataset, label, blind=False, max_n=None):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--max-samples", type=int, default=None)
+    parser.add_argument("--start-sample", type=int, default=0,
+                        help="Start from this sample index (for resuming)")
     parser.add_argument("--alpha", type=float, default=5.0)
+    parser.add_argument("--no-steering", action="store_true",
+                        help="Skip steered conditions")
     parser.add_argument("--output-dir", type=str, default="lab/reports/official_eval")
     args = parser.parse_args()
 
@@ -179,12 +183,17 @@ def main():
     print("="*60)
     model, processor = load_qwen3vl()
 
-    for label, blind, steer in [
+    conditions = [
         ("baseline", False, False),
         ("baseline_blind", True, False),
-        ("steered", False, True),
-        ("steered_blind", True, True),
-    ]:
+    ]
+    if not args.no_steering:
+        conditions += [
+            ("steered", False, True),
+            ("steered_blind", True, True),
+        ]
+
+    for label, blind, steer in conditions:
         steerer = None
         if steer:
             steerer = setup_steering(model, args.alpha)
