@@ -54,7 +54,7 @@ class VisionHeadProfiler:
             o_proj = attn.o_proj
 
             def make_hook(layer_idx):
-                def hook_fn(module, args, output):
+                def hook_fn(module, args):
                     # o_proj input: (batch, seq, num_heads * head_dim)
                     self._captured[layer_idx] = args[0].detach()
                 return hook_fn

@@ -1,0 +1,22 @@
+{
+  "model": "internvl3_5_1b",
+  "timestamp": "20260308_220922",
+  "n_samples": 500,
+  "baseline": {
+    "acc": 78.2,
+    "f1": 80.84358523725837,
+    "precision": 72.10031347962382,
+    "recall": 92.0,
+    "n": 500,
+    "n_unknown": 0
+  },
+  "blind": {
+    "acc": 50.0,
+    "f1": 0.0,
+    "precision": 0.0,
+    "recall": 0.0,
+    "n": 500,
+    "n_unknown": 0
+  },
+  "blind_gap": 28.200000000000003
+}

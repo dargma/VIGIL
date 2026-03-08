@@ -102,10 +102,12 @@ def _load_qwen3_vl(spec: ModelSpec, dtype, device) -> Dict[str, Any]:
 
 def _load_internvl3(spec: ModelSpec, dtype, device) -> Dict[str, Any]:
     from transformers import AutoModel, AutoTokenizer
+    # InternVL3.5 custom code has .item()/.tolist() in __init__ that fails
+    # with device_map="auto" (meta tensor context). Load on CPU first, then move.
     model = AutoModel.from_pretrained(
-        spec.hf_id, torch_dtype=dtype, device_map=device,
+        spec.hf_id, torch_dtype=dtype,
         trust_remote_code=True,
-    )
+    ).cuda().eval()
     tokenizer = AutoTokenizer.from_pretrained(spec.hf_id, trust_remote_code=True)
     return {
         "model": model,

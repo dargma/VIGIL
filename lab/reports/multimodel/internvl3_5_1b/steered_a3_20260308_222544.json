@@ -1,0 +1,20 @@
+{
+  "metrics": {
+    "Overall": {
+      "acc": 78.4,
+      "f1": 81.05263157894737,
+      "precision": 72.1875,
+      "recall": 92.4,
+      "n": 500,
+      "n_unknown": 0
+    },
+    "adversarial": {
+      "acc": 78.4,
+      "f1": 81.05263157894737,
+      "precision": 72.1875,
+      "recall": 92.4,
+      "n": 500,
+      "n_unknown": 0
+    }
+  }
+}

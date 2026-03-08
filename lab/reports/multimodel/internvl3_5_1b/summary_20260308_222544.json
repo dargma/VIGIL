@@ -1,0 +1,65 @@
+{
+  "model": "internvl3_5_1b",
+  "timestamp": "20260308_222544",
+  "n_samples": 500,
+  "conditions": {
+    "baseline": {
+      "acc": 78.2,
+      "f1": 80.84358523725837,
+      "precision": 72.10031347962382,
+      "recall": 92.0,
+      "n": 500,
+      "n_unknown": 0
+    },
+    "blind": {
+      "acc": 50.0,
+      "f1": 0.0,
+      "precision": 0.0,
+      "recall": 0.0,
+      "n": 500,
+      "n_unknown": 0
+    },
+    "steered_a1": {
+      "acc": 78.4,
+      "f1": 80.98591549295774,
+      "precision": 72.32704402515722,
+      "recall": 92.0,
+      "n": 500,
+      "n_unknown": 0
+    },
+    "steered_a3": {
+      "acc": 78.4,
+      "f1": 81.05263157894737,
+      "precision": 72.1875,
+      "recall": 92.4,
+      "n": 500,
+      "n_unknown": 0
+    },
+    "steered_a5": {
+      "acc": 78.4,
+      "f1": 81.11888111888112,
+      "precision": 72.04968944099379,
+      "recall": 92.80000000000001,
+      "n": 500,
+      "n_unknown": 0
+    },
+    "steered_a10": {
+      "acc": 76.6,
+      "f1": 80.20304568527918,
+      "precision": 69.50146627565982,
+      "recall": 94.8,
+      "n": 500,
+      "n_unknown": 0
+    },
+    "steered_a1_blind": {
+      "acc": 50.0,
+      "f1": 0.0,
+      "precision": 0.0,
+      "recall": 0.0,
+      "n": 500,
+      "n_unknown": 0
+    }
+  },
+  "blind_gap_baseline": 28.200000000000003,
+  "blind_gap_steered": 28.400000000000006
+}
