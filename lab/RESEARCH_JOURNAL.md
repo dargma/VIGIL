@@ -542,3 +542,20 @@ Step-by-step eval (Setting B):
 4. Increase group_size to 16 (reduce skip rate further)
 5. Run v3 with all fixes → expect measurable POPE improvement
 6. If v3 GRPO plateaus: try Best-of-N + SFT (P0 idea from ideation agent)
+
+### Block 2 v3 Results (100 steps, Setting B, all fixes applied)
+
+**Config**: group_size=16, lr=2e-6, frozen ref model, beta_kl=0.04, 100 steps
+
+| Step | POPE | Gap | Notes |
+|------|------|-----|-------|
+| 0 | 84.5% | 35.0pp | baseline |
+| 50 | **85.0%** | **35.0pp** | peak |
+| 80 | 84.5% | 35.0pp | stable |
+| 100 | 83.5% | 33.0pp | oscillation |
+
+**Verdict**: KL fix worked (non-zero KL values), skip rate down to 44%, but GRPO cannot push POPE above 85% with this reward signal. Model oscillates ±1.5pp around baseline. The training is stable but ineffective.
+
+**Root cause**: The reward (R_correct + IIG) is too coarse for GRPO advantage to provide useful gradient direction. Most of the "learning" is noise that averages out.
+
+**Pivot**: Moving to Best-of-N + SFT approach (P0 from ideation report)
