@@ -74,6 +74,75 @@ def soft_correct(pred: str, gt: str) -> float:
     return min(1.0, overlap)
 
 
+def accuracy_reward(pred: str, gt: str, question_type: str = "auto") -> float:
+    """Accuracy reward that handles multiple answer types.
+
+    For yes/no questions:
+        Exact match → 1.0, wrong answer → 0.0, unclear → 0.1
+    For multiple choice (A/B/C/D):
+        Exact match → 1.0, else 0.0
+    For open-ended (TextVQA, VQAv2):
+        VQA accuracy formula: min(1, # humans who said that / 3)
+        Simplified: exact match → 1.0, token overlap → partial credit
+    """
+    pred_clean = pred.strip().lower()
+    gt_clean = gt.strip().lower()
+
+    if not pred_clean:
+        return 0.0
+
+    # Auto-detect question type
+    if question_type == "auto":
+        if gt_clean in ("yes", "no"):
+            question_type = "yesno"
+        elif len(gt_clean) == 1 and gt_clean in "abcde":
+            question_type = "mc"
+        else:
+            question_type = "open"
+
+    if question_type == "yesno":
+        # Extract yes/no from prediction
+        import re
+        words = re.sub(r'[^\w\s]', ' ', pred_clean).split()
+        has_yes = "yes" in words
+        has_no = "no" in words
+        if gt_clean == "yes":
+            if has_yes and not has_no:
+                return 1.0
+            elif has_no and not has_yes:
+                return 0.0
+            else:
+                return 0.1  # ambiguous
+        else:  # gt is "no"
+            if has_no and not has_yes:
+                return 1.0
+            elif has_yes and not has_no:
+                return 0.0
+            else:
+                return 0.1
+
+    elif question_type == "mc":
+        # Multiple choice: first character match
+        pred_first = pred_clean.strip()[0] if pred_clean.strip() else ""
+        return 1.0 if pred_first == gt_clean else 0.0
+
+    else:  # open-ended
+        # Exact match
+        if pred_clean == gt_clean:
+            return 1.0
+        # VQA-style: token overlap with partial credit
+        pred_tokens = set(pred_clean.split())
+        gt_tokens = set(gt_clean.split())
+        if not gt_tokens:
+            return 0.0
+        overlap = len(pred_tokens & gt_tokens) / len(gt_tokens)
+        # Penalize very long predictions (verbosity)
+        length_ratio = len(pred_tokens) / max(len(gt_tokens), 1)
+        if length_ratio > 3:
+            overlap *= 0.5  # penalize verbose answers
+        return min(1.0, overlap)
+
+
 def soft_alpha(
     agreement: float,
     vision_activation: float,

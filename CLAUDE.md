@@ -1,3 +1,5 @@
+<!-- DEPRECATED: Migrated to OpenCode/OmO format. See AGENTS.md + opencode.json + .opencode/ -->
+
 # VIGIL: Vision-Grounded Inference via Guided head-Level steering
 
 ## 1. Project Overview

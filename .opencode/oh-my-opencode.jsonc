@@ -1,0 +1,46 @@
+{
+  "$schema": "https://raw.githubusercontent.com/code-yeongyu/oh-my-opencode/master/assets/oh-my-opencode.schema.json",
+  "disabled_mcps": ["websearch", "context7", "grep_app"],
+  "agents": {
+    "sisyphus": {
+      "temperature": 0.2,
+      "skills": ["controlled-experiment"]
+    },
+    "multimodal-looker": { "disable": true }
+  },
+  "categories": {
+    "ml-experiment": {
+      "description": "ML experiment execution for VLM grounding",
+      "temperature": 0.1,
+      "prompt_append": "Controlled experiment protocol. One variable. Record everything. Check GPU memory. Use BoN+SFT (not TRL GRPO). POPE prompt: '{question} Please answer yes or no.' Always run blind test."
+    },
+    "paper-analysis": {
+      "description": "Paper PDF analysis and literature review",
+      "temperature": 0.3,
+      "prompt_append": "Read from papers/ via pdftotext. Cross-reference docs/THEORY.md. Update papers/index.md. Focus on: VISTA, DVRP, DMAS comparisons."
+    },
+    "eval-analysis": {
+      "description": "Experiment result analysis and next experiment proposal",
+      "temperature": 0.2,
+      "prompt_append": "Compare against docs/EXPERIMENT_LOG.md. Track POPE accuracy AND blind gap. Precision matters more than raw accuracy for anti-hallucination story."
+    },
+    "debug-investigate": {
+      "description": "Training failure analysis and debugging",
+      "temperature": 0.1,
+      "prompt_append": "Systematic debugging. Collapse→check if binary VQA (use mixed data). OOM→reduce group_size first. NaN→rollback+LR/10. Always check blind gap not just accuracy."
+    }
+  },
+  "ralph_loop": { "enabled": true },
+  "background_task": {
+    "defaultConcurrency": 5,
+    "providerConcurrency": { "anthropic": 3, "openai": 5, "google": 10 }
+  },
+  "disabled_hooks": ["auto-update-checker"],
+  "claude_code": {
+    "mcp": false,
+    "commands": true,
+    "skills": true,
+    "hooks": false,
+    "plugins": true
+  }
+}

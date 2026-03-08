@@ -1,0 +1,27 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "model": "anthropic/claude-sonnet-4-20250514",
+  "instructions": [
+    "docs/THEORY.md",
+    "docs/EXPERIMENT_LOG.md",
+    "docs/DECISIONS.md",
+    "papers/index.md"
+  ],
+  "permission": {
+    "edit": "allow",
+    "bash": {
+      "python *": "allow",
+      "pip *": "allow",
+      "git *": "allow",
+      "nvidia-smi": "allow",
+      "torchrun *": "allow",
+      "accelerate *": "allow",
+      "wget *": "allow",
+      "pdftotext *": "allow",
+      "*": "allow"
+    },
+    "webfetch": "allow",
+    "skill": { "*": "allow" }
+  },
+  "mcp": {}
+}
