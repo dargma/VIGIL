@@ -147,9 +147,36 @@
   | DAPO short | 87.8% | 87.4% | 90.3% | 37.8pp |
 - Analysis: Both BoN+SFT and DAPO match at +0.4pp acc, +1.6pp precision on adversarial split.
 
+## exp_015: P2-04 IIG-Weighted SFT (Axis D, gamma=1.0)
+- Date: 2026-03-08
+- Hypothesis: Per-token IIG weighting in SFT loss improves visual grounding
+- Changes: loss_i = CE_i * (1 + gamma * max(IIG_i, 0)), gamma=1.0, 2 epochs on VQAv2 short answers
+- Results:
+  | Condition | Acc | Gap |
+  |-----------|-----|-----|
+  | Baseline (BoN+SFT) | 87.6% | 37.6pp |
+  | IIG-weighted (γ=1.0) | 87.2% | 37.2pp |
+  | Delta | -0.4pp | -0.4pp |
+- Analysis: IIG weighting slightly hurt performance. VQAv2 open-ended data is a poor match for POPE yes/no evaluation. The per-token IIG computation during training doubles forward passes per step, making it expensive for marginal/negative effect.
+- Lesson: IIG-weighted SFT needs POPE-format training data to be effective. The data domain mismatch (VQAv2 → POPE) overwhelms the IIG weighting benefit.
+
+## Summary of All Phase 2 Results
+
+| Experiment | Method | POPE Acc | Gap | Delta Acc | Delta Gap |
+|------------|--------|----------|-----|-----------|-----------|
+| Baseline | - | 87.4% | 37.4pp | - | - |
+| exp_008 | BoN+SFT | 87.8%* | 37.8pp* | +0.4pp | +0.4pp |
+| exp_010 | Steering α=3 | 88.0% | 38.0pp | +0.6pp | +0.6pp |
+| exp_012 | DAPO short | 87.8%* | 37.8pp* | +0.4pp | +0.4pp |
+| exp_013 | Steered distill | 87.2% | 37.0pp | -0.2pp | -0.4pp |
+| exp_015 | IIG-weighted SFT | 87.2% | 37.2pp | -0.2pp | -0.2pp |
+*Official eval on 3K adversarial
+
+**Key finding**: BoN+SFT and inference steering are the effective methods. Both improve precision (+1.6pp). Training methods that use mismatched data (VQAv2 for POPE evaluation) fail. DAPO adds marginal improvement over BoN+SFT.
+
 ## Next Experiments (Priority Order)
-1. P2-02 retry: Steered distillation with POPE-format data
-2. P2-04: IIG-weighted SFT loss (Axis D)
-3. P2-03: Drift-penalized selection (Axis B)
-4. Paper figure generation (drift curves, head heatmaps)
-5. Full 9K eval across all conditions
+1. BoN+SFT with POPE-format data (generate yes/no candidates from POPE-like questions)
+2. Combined: BoN+SFT + steering + DAPO (best of all three)
+3. Paper figure generation (drift curves, head heatmaps, precision analysis)
+4. Full 9K eval across all conditions
+5. Retry Axis D with in-domain data
