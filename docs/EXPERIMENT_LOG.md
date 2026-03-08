@@ -97,9 +97,34 @@
   - Step 20: reward=0.717±0.035 (improving)
 - Status: RUNNING
 
+## exp_011: DAPO Think Mode (COMPLETE)
+- Date: 2026-03-08
+- Hypothesis: DAPO with thinking model improves visual grounding via extended reasoning
+- Changes: Qwen3-VL-2B-Thinking, TextVQA training data, group=4, 30 steps, soft rewards
+- Results:
+  - Step 10: acc=76.3%, gap=26.3pp, reward=0.420
+  - Step 20: acc=75.7%, gap=25.7pp, reward=0.717
+  - Final: acc=77.0%, gap=27.0pp, F1=82.6%
+- Analysis: Thinking model plateaus ~76-77% on POPE — lower than Instruct (87.4%) because <think> tokens interfere with yes/no parsing. Gap ~27pp is lower than baseline (37pp). Extended reasoning doesn't help binary VQA visual grounding.
+- Checkpoint: `checkpoints/dapo/dapo_think/best`
+- Next: Short-answer DAPO from BoN+SFT
+
+## exp_012: DAPO Short-Answer Mode ★
+- Date: 2026-03-08
+- Hypothesis: DAPO with soft rewards improves BoN+SFT model further
+- Changes: Start from BoN+SFT checkpoint, VQAv2 training, group=8, 50 steps, asymmetric clipping
+- Results:
+  - Step 40: acc=88.0%, gap=38.0pp
+  - Step 50: acc=88.3%, gap=38.3pp
+  - **Final: acc=88.4%, gap=38.4pp, F1=88.0%**
+  - vs baseline: **+1.0pp acc, +1.0pp gap**
+- Analysis: DAPO successfully improved on BoN+SFT. Many zero-variance groups skipped (binary VQA) but enough diverse groups for gradient signal. Gap increased alongside accuracy — model became MORE image-dependent. Training was fast (0.2h) due to dynamic sampling skipping.
+- Checkpoint: `checkpoints/dapo/dapo_short/final`
+- Next: Steered distillation, IIG-weighted SFT
+
 ## Next Experiments (Priority Order)
-1. Complete DAPO think mode → eval
-2. DAPO short-answer mode (start from BoN+SFT checkpoint)
-3. P2-02: Steered distillation BoN+SFT
-4. P2-03: Drift-penalized selection (Axis B)
-5. P2-04: IIG-weighted SFT loss (Axis D)
+1. P2-02: Steered distillation BoN+SFT (Axis A)
+2. P2-04: IIG-weighted SFT loss (Axis D)
+3. P2-03: Drift-penalized selection (Axis B)
+4. Full 9K official eval on DAPO short checkpoint
+5. Paper figure generation (drift curves, head heatmaps)

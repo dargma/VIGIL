@@ -107,7 +107,11 @@ def load_model(model_path=None, for_training=False, enable_thinking=False):
     model = Qwen3VLForConditionalGeneration.from_pretrained(
         hf_id, torch_dtype=torch.bfloat16, device_map="auto",
     )
-    processor = AutoProcessor.from_pretrained(hf_id)
+    # Always load processor from base HF model (local checkpoints lack preprocessor_config)
+    processor_id = "Qwen/Qwen3-VL-2B-Instruct"
+    if enable_thinking and model_path is None:
+        processor_id = "Qwen/Qwen3-VL-2B-Thinking"
+    processor = AutoProcessor.from_pretrained(processor_id)
 
     if for_training:
         model.train()
