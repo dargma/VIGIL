@@ -71,7 +71,7 @@ def load_model(model_path=None):
 
     # get_layers_fn for VisionDriftAnalyzer
     def get_layers():
-        return model.model.layers
+        return model.model.language_model.layers
 
     model_info = {
         "model": model, "processor": processor, "tokenizer": processor.tokenizer,
@@ -202,6 +202,7 @@ def generate_with_drift_tracking(model, model_info, inputs, tracker, max_tokens=
 
     generated_ids = []
     past_key_values = None
+    cur_attention_mask = attention_mask
 
     try:
         for step in range(max_tokens):
@@ -209,12 +210,19 @@ def generate_with_drift_tracking(model, model_info, inputs, tracker, max_tokens=
                 if step == 0:
                     outputs = model(
                         input_ids=input_ids,
-                        attention_mask=attention_mask,
+                        attention_mask=cur_attention_mask,
                         use_cache=True,
                     )
                 else:
+                    # Extend attention mask for new token
+                    cur_attention_mask = torch.cat([
+                        cur_attention_mask,
+                        torch.ones(1, 1, device=cur_attention_mask.device,
+                                   dtype=cur_attention_mask.dtype)
+                    ], dim=1)
                     outputs = model(
                         input_ids=next_token.unsqueeze(0),
+                        attention_mask=cur_attention_mask,
                         past_key_values=past_key_values,
                         use_cache=True,
                     )
