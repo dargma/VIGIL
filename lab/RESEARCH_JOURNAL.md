@@ -600,3 +600,49 @@ Step-by-step eval (Setting B):
 2. Add R_vhad to scoring (currently R_correct + IIG only)
 3. Steering-augmented generation (steered candidates as positive examples)
 4. Compare with DAPO on same data
+
+---
+
+## 2026-03-08 — Block 2 Round 2: Multi-round BoN+SFT
+
+### Experiment Plots Generated
+
+Publication-quality plots covering the full experiment history:
+- `lab/reports/fig1_pope_progression.png` — POPE accuracy before/after across all 6 experiments
+- `lab/reports/fig2_blind_gap_progression.png` — Blind Test Gap progression with collapse artifact annotations
+- `lab/reports/fig3_bon_candidate_quality.png` — BoN+SFT candidate score distribution + source breakdown
+- `lab/reports/fig4_method_comparison.png` — Method comparison table (GRPO vs BoN+SFT)
+- `lab/reports/fig5_grpo_dynamics.png` — Step-by-step GRPO training dynamics vs BoN+SFT result
+- Script: `lab/reports/generate_block2_plots.py`
+
+### Round 2 Multi-round BoN+SFT
+
+**Status**: IN PROGRESS
+
+**Config**:
+- Base model: Round-1 checkpoint (`checkpoints/block2_bon/final`)
+- N=8 candidates per sample, temp=1.2, top_p=0.95
+- Scoring: R_correct + IIG (lambda=0.0615, eps=0.1)
+- SFT: lr=1e-6 (halved from round 1 to prevent overshooting), 2 epochs
+- Seed: 43 (different from round 1 seed=42 to avoid data overlap in sampling)
+- Data: same mixed pool (VQAv2 + A-OKVQA + TextVQA), 1000 samples
+
+**Rationale**:
+Round 1 showed that the BoN+SFT pipeline produces genuine improvement (+2.5pp POPE, +5.0pp Blind Gap). Multi-round iteration (ReST-style) should compound the gains: the round-1 model generates higher-quality candidates, yielding a better curated dataset for round 2. Halving the learning rate avoids catastrophic forgetting of round-1 gains.
+
+**Expected outcome (based on round 1)**:
+- Conservative: POPE 85.5% -> 86.5% (+1pp), Gap 37pp -> 39pp (+2pp)
+- Optimistic: POPE 85.5% -> 88% (+2.5pp), Gap 37pp -> 42pp (+5pp)
+- Risk: Diminishing returns if round-1 model already saturated on easy samples. Watch for yes/no bias drift.
+
+**Key metrics to watch**:
+1. Candidate yield (round 1 was 69.2% = 692/1000). If round-2 model generates better candidates, yield should increase.
+2. Best candidate score distribution — should shift right vs round 1 (round 1 mean best_score=0.116).
+3. POPE yes/no balance — round 1 shifted slightly toward no-bias (95/105). Monitor for further drift.
+4. Blind Gap — the primary success metric. Must stay above 37pp or improve.
+
+**Next**:
+1. Complete round 2 generation + SFT
+2. If improvement: continue to round 3
+3. If plateau: add R_vhad to scoring function
+4. If regression: reduce lr further or switch to DPO

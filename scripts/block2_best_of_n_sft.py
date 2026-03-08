@@ -49,6 +49,9 @@ def parse_args():
     # Paths
     p.add_argument("--output-dir", type=str, default="checkpoints/block2_bon")
     p.add_argument("--candidates-file", type=str, default="data/training/bon_candidates.json")
+    p.add_argument("--model-path", type=str, default=None,
+                   help="Path to model checkpoint (default: base Qwen3-VL-2B-Instruct)")
+    p.add_argument("--round", type=int, default=1, help="Iteration round number")
     p.add_argument("--seed", type=int, default=42)
     return p.parse_args()
 
@@ -56,14 +59,16 @@ def parse_args():
 # ---------------------------------------------------------------------------
 # Model loading
 # ---------------------------------------------------------------------------
-def load_model(for_training=False):
+def load_model(for_training=False, model_path=None):
     from transformers import Qwen3VLForConditionalGeneration, AutoProcessor
-    print("[model] Loading Qwen3-VL-2B-Instruct...")
+    base = "Qwen/Qwen3-VL-2B-Instruct"
+    load_path = model_path if model_path else base
+    print(f"[model] Loading {load_path}...")
     dtype = torch.bfloat16 if for_training else torch.float16
     model = Qwen3VLForConditionalGeneration.from_pretrained(
-        "Qwen/Qwen3-VL-2B-Instruct", torch_dtype=dtype, device_map="auto",
+        load_path, torch_dtype=dtype, device_map="auto",
     )
-    processor = AutoProcessor.from_pretrained("Qwen/Qwen3-VL-2B-Instruct")
+    processor = AutoProcessor.from_pretrained(base)
     if for_training:
         model.train()
         model.gradient_checkpointing_enable()
@@ -467,7 +472,7 @@ def main():
 
     if args.phase in ("generate", "both"):
         # Phase 1: generate + score
-        model, processor, model_info = load_model(for_training=False)
+        model, processor, model_info = load_model(for_training=False, model_path=args.model_path)
 
         # Baseline eval
         print("\n[2] Baseline evaluation...")
@@ -491,7 +496,7 @@ def main():
 
     if args.phase in ("sft", "both"):
         # Phase 2: SFT on best candidates
-        model, processor, model_info = load_model(for_training=True)
+        model, processor, model_info = load_model(for_training=True, model_path=args.model_path)
 
         if pope_base is None:
             print("\n[2] Baseline evaluation...")
@@ -509,9 +514,10 @@ def main():
         print(f"  Blind: real={blind_post['acc_real']:.1f}%, blind={blind_post['acc_blind']:.1f}%, Gap={blind_post['gap']:.1f}pp (delta={blind_post['gap']-blind_base['gap']:+.1f}pp)")
 
         # Save model
-        model.save_pretrained(str(output_dir / "final"))
-        model_info["tokenizer"].save_pretrained(str(output_dir / "final"))
-        print(f"  Saved to {output_dir / 'final'}")
+        save_dir = output_dir / f"round{args.round}"
+        model.save_pretrained(str(save_dir))
+        model_info["tokenizer"].save_pretrained(str(save_dir))
+        print(f"  Saved to {save_dir}")
 
         # Save results
         results = {
@@ -521,7 +527,7 @@ def main():
             "post_sft": {"pope": pope_post, "blind": blind_post},
             "n_candidates_used": len(candidates_data),
         }
-        results_path = output_dir / f"results_{ts}.json"
+        results_path = output_dir / f"results_round{args.round}_{ts}.json"
         with open(results_path, "w") as f:
             json.dump(results, f, indent=2, default=str)
         print(f"  Results: {results_path}")

@@ -379,7 +379,44 @@ v4 (open-ended TextVQA) script written but never ran (GPU unavailable).
 **Key lesson**: GRPO advantage estimation is too noisy for binary/short-answer VQA. BoN+SFT (ReST/RAFT approach) is strictly superior for this task — curates high-quality data then trains on it.
 
 **Next**:
-1. Multi-round BoN+SFT (use round-1 model for round-2 generation)
+1. ~~Multi-round BoN+SFT (use round-1 model for round-2 generation)~~ IN PROGRESS
 2. Add R_vhad to scoring
 3. DAPO comparison
 4. Git push milestone
+
+### [2026-03-08] Session 2: Multi-Round BoN+SFT + Thinking Mode Eval
+
+**BoN+SFT Round 2 (IN PROGRESS)**:
+- Model: `checkpoints/block2_bon/final` (round-1 checkpoint)
+- Config: lr=1e-6, seed=43, N=8, temp=1.2, 1000 samples
+- Log: `logs/block2_bon_round2.log`
+- Output: `checkpoints/block2_bon/round2`
+- Status: Generation 700/1000
+
+**Thinking Mode Eval (PREPARED, pending GPU)**:
+- Script: `scripts/eval_thinking_mode.py`
+- Tests 3 conditions: baseline, bon_r1, bon_r2
+- Tracks: POPE accuracy, Blind Gap, Vision Drift Curve (Figure 1)
+- Run commands:
+  1. `python scripts/eval_thinking_mode.py --model-label baseline`
+  2. `python scripts/eval_thinking_mode.py --model-path checkpoints/block2_bon/final --model-label bon_r1`
+  3. `python scripts/eval_thinking_mode.py --model-path checkpoints/block2_bon/round2 --model-label bon_r2`
+
+**Publication plots generated**: `lab/reports/generate_block2_plots.py`
+- fig1_pope_progression.png, fig2_blind_gap_progression.png
+- fig3_bon_candidate_quality.png, fig4_method_comparison.png, fig5_grpo_dynamics.png
+
+**Verification issues found** (non-blocking but should fix):
+1. SFT label masking: prompt_len may miss assistant role tokens
+2. OOM handling: n_batches counter not properly tracked
+3. Image persistence: images not saved in candidates JSON
+
+**New files**:
+- `scripts/eval_thinking_mode.py` — thinking mode eval + drift analysis
+- `lab/reports/generate_block2_plots.py` — 5 publication figures
+
+**Next when resuming**:
+1. Check round 2 results: `tail -50 logs/block2_bon_round2.log`
+2. If done: run thinking mode eval (3 conditions)
+3. Fix verification bugs in block2_best_of_n_sft.py
+4. Git commit + push milestone
