@@ -1,0 +1,21 @@
+{
+  "model": "internvl3_5_1b_bon_sft",
+  "timestamp": "20260308_225151",
+  "baseline": {
+    "acc": 82.6,
+    "f1": 83.67729831144464,
+    "precision": 78.79858657243817,
+    "recall": 89.2,
+    "n": 500,
+    "n_unknown": 0
+  },
+  "blind": {
+    "acc": 50.0,
+    "f1": 0.0,
+    "precision": 0.0,
+    "recall": 0.0,
+    "n": 300,
+    "n_unknown": 0
+  },
+  "blind_gap": 32.599999999999994
+}
