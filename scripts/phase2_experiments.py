@@ -307,10 +307,18 @@ def run_p2_02(args):
     from src.iig import compute_iig
 
     dataset = load_from_disk("data/eval/pope")
-    train_data = load_from_disk("data/training/vqav2")
+    train_data = load_from_disk("data/training/vqav2_train")
     calibration = CalibrationResult.load("checkpoints/calibration/qwen3_vl_2b")
 
     model, processor = load_qwen3vl()
+
+    # Build model_info for IIG
+    model_info = {
+        "model": model, "processor": processor,
+        "tokenizer": processor.tokenizer,
+        "device": next(model.parameters()).device,
+        "model_type": "qwen3_vl",
+    }
 
     # ── Phase 1: Generate steered candidates ──
     print("\n[P2-02] Phase 1: Generating steered candidates...")
@@ -322,8 +330,11 @@ def run_p2_02(args):
     for i in range(n_train):
         sample = train_data[i]
         question = sample["question"]
-        gt = sample["answer"]
+        gt = sample.get("answer", sample.get("multiple_choice_answer", "")).strip()
         image = sample["image"]
+
+        if not gt:
+            continue
 
         try:
             cands = generate_candidates(
@@ -344,7 +355,7 @@ def run_p2_02(args):
 
             # IIG scoring
             try:
-                iig_val = compute_iig(model, processor, image, question, c)
+                iig_val = compute_iig(model_info, question, image, c)
                 iig_reward = min(max(iig_val * args.lambda_iig, 0), 1.0)
             except Exception:
                 iig_reward = 0.0
@@ -505,7 +516,7 @@ def run_dapo(args):
     from src.iig import compute_iig
 
     # Load mixed training data (non-binary for diversity)
-    train_data = load_from_disk("data/training/vqav2")
+    train_data = load_from_disk("data/training/vqav2_train")
     eval_data = load_from_disk("data/eval/pope")
     calibration = CalibrationResult.load("checkpoints/calibration/qwen3_vl_2b")
 

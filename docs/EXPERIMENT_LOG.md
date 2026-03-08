@@ -122,9 +122,34 @@
 - Checkpoint: `checkpoints/dapo/dapo_short/final`
 - Next: Steered distillation, IIG-weighted SFT
 
+## exp_013: P2-02 Steered Distillation BoN+SFT (Axis A)
+- Date: 2026-03-08
+- Hypothesis: Generate candidates with steering active (α=3) → SFT internalizes steering permanently
+- Changes: 1000 VQAv2 samples, N=8 candidates steered, IIG scoring, SFT 2 epochs on 967 curated samples
+- Results:
+  | Condition | Acc | Gap |
+  |-----------|-----|-----|
+  | Baseline | 87.4% | 37.4pp |
+  | Steered distill (unsteered eval) | 87.2% | 37.0pp |
+  | Steered distill + steer(α=1) | 87.4% | - |
+- Analysis: Internalization FAILED. SFT loss was very high (19.5→9.9) — VQAv2 open-ended answers are poor fit for POPE yes/no. Model learned VQAv2 patterns but this didn't help POPE. Stacking (+α=1) recovers to baseline, confirming steering still works.
+- Lesson: Steered distillation should use POPE-format training data, not open-ended VQAv2. The candidate generation prompt must match evaluation format.
+- Checkpoint: `checkpoints/phase2/p2_02_steered_distill`
+- Next: Retry with POPE-format data or try IIG-weighted SFT
+
+## exp_014: Official Eval 3K Adversarial
+- Date: 2026-03-08
+- Results (3K adversarial POPE, VLMEvalKit standard):
+  | Condition | Acc | F1 | Precision | Gap |
+  |-----------|-----|-----|-----------|-----|
+  | Baseline | 87.4% | 87.2% | 88.7% | 37.4pp |
+  | BoN+SFT | 87.8% | 87.4% | 90.3% | 37.8pp |
+  | DAPO short | 87.8% | 87.4% | 90.3% | 37.8pp |
+- Analysis: Both BoN+SFT and DAPO match at +0.4pp acc, +1.6pp precision on adversarial split.
+
 ## Next Experiments (Priority Order)
-1. P2-02: Steered distillation BoN+SFT (Axis A)
+1. P2-02 retry: Steered distillation with POPE-format data
 2. P2-04: IIG-weighted SFT loss (Axis D)
 3. P2-03: Drift-penalized selection (Axis B)
-4. Full 9K official eval on DAPO short checkpoint
-5. Paper figure generation (drift curves, head heatmaps)
+4. Paper figure generation (drift curves, head heatmaps)
+5. Full 9K eval across all conditions
