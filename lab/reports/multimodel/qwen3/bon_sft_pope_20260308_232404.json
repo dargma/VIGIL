@@ -1,0 +1,24 @@
+{
+  "model": "qwen3",
+  "method": "bon_sft_pope_format",
+  "timestamp": "20260308_232404",
+  "n_train": 462,
+  "n_eval": 500,
+  "baseline": {
+    "acc": 88.0,
+    "f1": 87.70491803278688,
+    "precision": 89.91596638655463,
+    "recall": 85.6,
+    "n": 500,
+    "n_unknown": 0
+  },
+  "blind": {
+    "acc": 50.0,
+    "f1": 0.0,
+    "precision": 0.0,
+    "recall": 0.0,
+    "n": 300,
+    "n_unknown": 0
+  },
+  "blind_gap": 38.0
+}
