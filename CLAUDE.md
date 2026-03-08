@@ -420,3 +420,41 @@ v4 (open-ended TextVQA) script written but never ran (GPU unavailable).
 2. If done: run thinking mode eval (3 conditions)
 3. Fix verification bugs in block2_best_of_n_sft.py
 4. Git commit + push milestone
+
+### [2026-03-08] Session 3: Official VLMEvalKit Evaluation
+
+**VLMEvalKit integration for publication-quality scores.**
+
+**Key decision**: Use VLMEvalKit's exact prompt templates and answer parsing (not custom).
+- POPE prompt: `{question} Please answer yes or no.` (from `vlmeval/vlm/qwen3_vl/prompt.py`)
+- Parsing: `YOrN_Extraction()` — process_punctuation + word-level yes/no check
+- Metrics: acc, F1, precision, recall per split (random/popular/adversarial)
+- Functions inlined in eval script (full vlmeval import fails due to missing megabench submodule)
+
+**Official Results (500 samples, first pass)**:
+| Condition | Acc | F1 | P | R | Blind Gap |
+|-----------|-----|-----|---|---|-----------|
+| Baseline | 87.6% | 87.4% | 88.5% | 86.4% | 37.6pp |
+| Steered (α=5) | 87.6% | 87.6% | 87.3% | 88.0% | 37.6pp |
+| BoN+SFT R1 | **88.0%** | 87.6% | **90.6%** | 84.8% | **38.0pp** |
+| All blind | 50.0% | 0.0% | 0.0% | 0.0% | — |
+
+**Key findings**:
+- Baseline higher than custom eval (87.6% vs 83.0%) — official prompts + parsing more consistent
+- BoN+SFT R1 still shows improvement (+0.4pp acc, +0.4pp gap)
+- Blind = all-No (50% acc on balanced POPE) — model truly uses images
+- Steering shows no effect at α=5 with official prompts — may need re-tuning
+
+**Full 9000-sample eval**: RUNNING in background
+
+**New files**:
+- `scripts/eval_official.py` — Full VLMEvalKit-standard eval (single condition)
+- `scripts/eval_official_fast.py` — Fast multi-condition eval (loads model once per group)
+- `src/soft_rewards.py` — Soft thresholding reward functions
+
+**Next**:
+1. Full 9000-sample results (per-split breakdown: random/popular/adversarial)
+2. Re-tune steering alpha with official prompts
+3. MME + MMBench eval (need pair-based scoring for MME)
+4. DAPO + soft thresholding integration
+5. Git push milestone
