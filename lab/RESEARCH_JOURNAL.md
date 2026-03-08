@@ -646,3 +646,85 @@ Round 1 showed that the BoN+SFT pipeline produces genuine improvement (+2.5pp PO
 2. If improvement: continue to round 3
 3. If plateau: add R_vhad to scoring function
 4. If regression: reduce lr further or switch to DPO
+
+---
+
+## 2026-03-08 — Multi-Agent Analysis Session
+
+### Research Agent Findings
+
+**BoN+SFT Theoretical Grounding**:
+- BoN+SFT is equivalent to the ReST (Reinforced Self-Training) / RAFT (Reward rAnked Fine-Tuning) family of methods. The key insight is that reward-filtered SFT avoids the noisy advantage estimation that makes GRPO unstable on low-entropy tasks.
+- The 69.2% yield (692/1000 samples with score > 0) indicates the base model already has sufficient capability -- BoN merely surfaces the best behavior and distills it. This is consistent with "best-of-N distillation" theory: the effective policy after BoN+SFT approximates the optimal policy under the reward model.
+- Multi-round iteration (ReST-style) should compound gains but with diminishing returns per round. Expected trajectory: R1 +2.5pp, R2 +1-1.5pp, R3 +0.5pp (logarithmic).
+
+**IIG Calibration Analysis**:
+- Lambda=0.0615 was auto-calibrated as 1/mean_IIG. This normalizes IIG to contribute ~1.0 to the composite score on average.
+- The 99.4% positive rate (497/500) confirms IIG is a reliable signal for POPE-style binary VQA.
+- Per-token IIG variance (structural tokens ~0, answer tokens ~10-18) suggests token-level IIG could serve as a process reward for SFT loss weighting.
+
+### Verify Agent Findings: 4 Critical Bugs
+
+| Bug | Severity | File | Description | Status |
+|-----|----------|------|-------------|--------|
+| 1. KL always zero | CRITICAL | `block2_custom_grpo_v2.py` | `ref_logprobs = current_logprobs` -- no frozen reference model, KL penalty is identically zero. Policy unconstrained. | Fixed in v3 (frozen ref copy) |
+| 2. Partial credit false positives | HIGH | `block2_custom_grpo_v2.py` | Substring match gives 0.5 credit for wrong answers (e.g., "car" matches "carnival"). Contaminates reward signal. | Fixed in v3 (exact match) |
+| 3. Tensor aliasing in steerer | HIGH | `src/steerer.py` | `modified[:, -1, :].view()` creates aliased view, in-place `+=` corrupts original tensor. | Fixed (added `.clone()`) |
+| 4. IIG attention_mask mismatch | HIGH | `src/iig.py` | Candidate tokens appended to `input_ids` without extending `attention_mask`. Qwen3-VL uses mask for RoPE positions, causing silent IndexError. | Fixed (extend mask) |
+
+All 4 bugs were found during the experiment cycle and fixed before the BoN+SFT breakthrough. The BoN+SFT results are clean.
+
+### 15 New Experiment Ideas (Summary Table)
+
+| ID | Idea | Priority | Type | Expected Impact |
+|----|------|----------|------|-----------------|
+| 9 | R_vhad + BoN scoring | HIGH | Extends BoN | Better internal grounding in curated data |
+| 10 | Steering-augmented candidate generation | HIGH | Extends BoN | Higher quality candidates, self-steering model |
+| 14 | Thinking mode drift curve | HIGH | Analysis | Figure 1 candidate, core paper visualization |
+| 15 | Token-level IIG as process reward | HIGH | Novel reward | Per-token grounding signal in SFT loss |
+| 11 | Vision drift penalty in scoring | MED-HIGH | Extends BoN | Penalize drift directly in candidate selection |
+| 1 | Two types of vision heads | HIGH | Analysis | Feature vs decision heads, novel finding |
+| 12 | DAPO + dynamic sampling + IIG | MEDIUM | Alt. to BoN | Fix GRPO collapse via DAPO mechanisms + IIG |
+| 3 | Vision drift as training signal | MEDIUM | Reward design | Direct drift penalty in RL reward |
+| 7 | Thinking mode analysis | MEDIUM | Analysis | Subsumed by Idea 14 |
+| 13 | Cross-model steering transfer | MED-HIGH | Novel | Qwen3-VL vectors on InternVL3.5 |
+| 6 | Proportional steering by delta | LOW-MED | Improvement | Per-head alpha scaling |
+| 2 | Adaptive reward weights | MEDIUM | Curriculum | Shift w_correct -> w_visual over training |
+| 4 | Agreement threshold ablation | LOW-MED | Ablation | Sweep gating threshold |
+| 5 | Cross-modal transfer (original) | LOW | Subsumed | Merged into Idea 13 |
+| 8 | Compact steering (PCA) | LOW | Efficiency | Compress steering vectors |
+
+Full details in `lab/RESEARCH_IDEAS.md` (Ideas 9-15 added).
+
+### DAPO + Steering Design Space
+
+The DAPO failure in Alpha-Triton at 0.6B (-41pp compile) was caused by no KL penalty on a small model. For VIGIL at 2B:
+
+**Safe DAPO configuration**:
+- Asymmetric clipping: eps_low=0.2, eps_high=0.28
+- KL: Start with beta=0.02 (not zero -- learned from Alpha-Triton collapse)
+- Dynamic sampling: Resample if all group members have identical reward
+- Entropy floor: H(pi) > 0.3 bits, else add entropy bonus
+- IIG integration: R = 0.4*R_correct + 0.3*IIG + 0.2*R_format + 0.1*R_length
+- Data: Mixed non-binary only (learned from Block 1 binary VQA collapse)
+
+**Steering integration options**:
+1. **Steering during generation only**: Generate steered candidates, score unsteered. Tests whether RL can internalize steering.
+2. **Steering during scoring only**: Generate unsteered, score with steered model activations. Reward signal includes steering benefit.
+3. **Steering during both**: Full pipeline. Risk: model becomes steering-dependent.
+4. **Steering curriculum**: Start steered (easy exploration), reduce alpha over training (force internalization).
+
+Option 4 (curriculum) is the most principled -- it combines the exploration benefit of steering with the permanence goal of RL training.
+
+### Plots Generated
+
+- `lab/reports/generate_thinking_plots.py` -- thinking mode drift analysis script (3 plots)
+  - Drift curve: vision head activation vs token position (Figure 1 layout)
+  - POPE thinking comparison: bar chart across conditions
+  - Chain length histogram: distribution of thinking chain lengths
+  - Currently generates placeholder data; will use real data from `lab/reports/thinking_mode/results_*.json`
+
+### Files Modified
+- `lab/RESEARCH_IDEAS.md` -- Added Ideas 9-15, updated priority order and experiment status table
+- `lab/RESEARCH_JOURNAL.md` -- This entry
+- `lab/reports/generate_thinking_plots.py` -- NEW: thinking mode plot generator

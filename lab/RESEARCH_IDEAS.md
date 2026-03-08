@@ -175,8 +175,178 @@ If K=3 components match K=20 full vectors, it proves steering is even more effic
 |-----------|--------|--------|
 | Smoke test | DONE | 9/9 pass, Δ=6.1 mean |
 | Calibration | DONE | 20 heads, top L5H0 d=9.80 |
-| POPE baseline | RUNNING | Waiting... |
-| POPE steered | PENDING | After baseline |
-| Blind test | PENDING | After steered |
-| Two-head-types ablation | PLANNED | After baseline |
-| Proportional steering | PLANNED | Implement next |
+| POPE baseline | DONE | 79.0% random, 76.5% popular, 78.5% adversarial |
+| POPE steered | DONE | +1.5-2.0pp across all splits (alpha=1.0) |
+| Blind test | DONE | Gap 25.4pp baseline, 28.4pp steered (+3.0pp) |
+| Alpha sweep | DONE | Monotonic to alpha=10 (+9pp), no saturation |
+| IIG calibration | DONE | lambda=0.0615, 99.4% positive |
+| Block 1 GRPO v1-v3 | DONE | All collapsed (TRL not viable for binary VQA) |
+| Block 2 v2 GRPO | DONE | Stable but flat (+0.5pp POPE max) |
+| Block 2 v3 GRPO | DONE | Oscillated, no lasting improvement |
+| Block 2 BoN+SFT R1 | DONE | POPE +2.5pp, Gap +5.0pp (BREAKTHROUGH) |
+| Block 2 BoN+SFT R2 | IN PROGRESS | Multi-round iteration |
+| Two-head-types ablation | PLANNED | After BoN rounds |
+| Proportional steering | PLANNED | After BoN rounds |
+
+---
+
+## Idea 9: R_vhad + BoN Scoring (HIGH PRIORITY)
+
+### Observation
+Current BoN scoring uses R_correct + IIG only. R_vhad (vision head activation differential) provides a complementary signal measuring how much the model's internal activations differ between real and black images.
+
+### Hypothesis
+Adding R_vhad to the BoN scoring function will select candidates that are not just correct and IIG-grounded, but also show strong internal visual processing. This should produce a curated dataset that teaches even deeper visual grounding than IIG alone.
+
+### Experiment
+- Score = w1*R_correct + w2*IIG + w3*R_vhad
+- Sweep w3: [0.0, 0.3, 0.5, 0.7]
+- Compare curated dataset quality (mean vision head activation in selected candidates)
+- Train SFT on each curated set, compare POPE + Blind Gap
+
+### Why This Matters
+IIG measures token-level information gain (output space). R_vhad measures head-level activation (internal space). The combination selects for candidates that are correct, output-grounded, AND internally-grounded. Triple filtering should produce the highest-quality curated data.
+
+---
+
+## Idea 10: Steering-Augmented Candidate Generation (HIGH)
+
+### Observation
+BoN generates N=8 candidates from the base model. Steering increases vision head activation and improves accuracy (+2pp at alpha=1, +9pp at alpha=10). Steered candidates should be systematically better.
+
+### Hypothesis
+Generate half the candidates unsteered and half steered (at varying alpha). The steered candidates will have higher R_correct and R_vhad scores, biasing the "best" selection toward visually-grounded answers.
+
+### Experiment
+- Generate 4 unsteered + 4 steered (alpha=3.0) candidates per sample
+- Compare best candidate quality vs 8 unsteered
+- Ablation: all-steered vs mixed vs all-unsteered
+- Track whether SFT on steered-selected data produces models that need steering at inference
+
+### Why This Matters
+If training on steered candidates teaches the model to internally replicate steering behavior, this collapses Stage A (inference-time steering) into Stage B (training). The model becomes self-steering.
+
+---
+
+## Idea 11: Vision Drift Penalty in BoN Scoring (MEDIUM-HIGH)
+
+### Observation
+Visual attention drift (O(1/L_total) decay) is the core problem VIGIL addresses. Current BoN scoring ignores token-position dynamics entirely.
+
+### Hypothesis
+Add a drift penalty to BoN scoring: measure vision head activation slope over the generated token positions. Candidates with flat or positive slopes (sustained visual attention) get rewarded; candidates with steep negative slopes (rapid drift) get penalized.
+
+### Experiment
+- R_drift = sigmoid(slope_of_vision_activation * scale)
+- Score = R_correct + lambda*IIG + mu*R_drift
+- Compare selected candidates: do drift-penalized selections produce longer, more visually-grounded answers?
+- Particularly relevant for open-ended (TextVQA, A-OKVQA) answers where token count > 10
+
+### Why This Matters
+Directly operationalizes the thesis problem as a training signal. Unique to VIGIL -- no prior work penalizes drift during candidate selection.
+
+---
+
+## Idea 12: DAPO + Dynamic Sampling with IIG (MEDIUM)
+
+### Observation
+GRPO collapsed on binary VQA due to zero variance in groups. DAPO's dynamic sampling resamples zero-variance groups. IIG adds continuous variance. The combination may fix both failure modes.
+
+### Hypothesis
+DAPO with IIG reward will avoid collapse AND provide useful gradient, because:
+1. Dynamic sampling skips degenerate groups (DAPO fix for zero variance)
+2. IIG adds continuous reward to break ties (VIGIL fix for binary reward)
+3. Asymmetric clipping allows larger upward updates (helps when signal is weak)
+4. No KL penalty avoids premature convergence (but may be risky at 2B -- see Block 1 failure)
+
+### Experiment
+- Implement custom DAPO loop (TRL GRPOTrainer failed, need manual)
+- Compare: DAPO alone, DAPO+IIG, GRPO+IIG, BoN+SFT
+- Use mixed non-binary data (learned from Block 2 that binary VQA is unsuitable for RL)
+- Monitor entropy, yes/no balance, skip rate at every step
+
+### Risk
+DAPO without KL penalty collapsed catastrophically at 0.6B in Alpha-Triton (-41pp). At 2B it might be stable, but must add entropy floor as safety net.
+
+---
+
+## Idea 13: Cross-Model Steering Transfer (Qwen3-VL to InternVL3) (MEDIUM-HIGH)
+
+### Observation
+Both Qwen3-VL-2B and InternVL3.5-1B share GQA 16Q/8KV architecture with 28 layers. The alpha sweep shows monotonic benefit, suggesting steering is not model-specific but architecture-specific.
+
+### Hypothesis
+Steering vectors calibrated on Qwen3-VL-2B will partially transfer to InternVL3.5-1B if vision head specialization is determined by architecture (layer depth, head position) rather than learned weights.
+
+### Experiment
+- Calibrate steering vectors on Qwen3-VL-2B (already done)
+- Apply directly to InternVL3.5-1B (same layer/head indices)
+- Also calibrate natively on InternVL3.5-1B for comparison
+- Measure: transfer accuracy / native accuracy ratio
+- If >80%: architecturally universal. If <50%: model-specific.
+
+### Why This Matters
+Universality of vision heads is a novel finding. If confirmed, steering becomes a model-agnostic tool -- calibrate once on a cheap model, deploy on expensive ones.
+
+---
+
+## Idea 14: Thinking Mode Drift Curve (FIGURE 1 CANDIDATE) (HIGH)
+
+### Observation
+Qwen3-VL-2B-Thinking generates long reasoning chains (100-500 tokens). The thesis predicts vision head activation decays as O(1/L_total) during generation. This decay IS the visual attention drift problem.
+
+### Hypothesis
+Plotting vision head activation vs token position will show:
+1. Baseline: clear exponential decay in thinking chain
+2. Steered: sustained activation (flat or slower decay)
+3. BoN-trained: intermediate (partial internalization of visual attention)
+4. BoN-trained + steered: best of both (permanent + augmented)
+
+### Experiment
+- Load Qwen3-VL-2B-Thinking
+- Generate 50 thinking-chain responses on POPE (with hooks recording per-token activation)
+- Plot: x=token position, y=mean vision head activation (top-K heads)
+- 4 curves: baseline, steered, BoN R1, BoN R1 + steered
+- Annotate: think token boundaries, answer token
+
+### Why This Matters
+This plot IS the paper's Figure 1. It visually demonstrates the problem (drift) and the solution (VIGIL). No prior work has published this type of analysis for VLMs.
+
+---
+
+## Idea 15: Token-Level IIG as Process Reward (HIGH)
+
+### Observation
+IIG calibration showed per-token IIG varies dramatically: "yes" token IIG=16.3, "person" IIG=12.5, structural tokens IIG~0. Currently we use mean IIG across all tokens.
+
+### Hypothesis
+Using token-level IIG as a process reward (weight each token's contribution to the loss by its IIG) would teach the model that visually-grounded tokens matter more than structural ones.
+
+### Experiment
+- During SFT: loss_token_i = CE_i * (1 + gamma * IIG_i) where gamma scales IIG influence
+- Compare: uniform SFT loss vs IIG-weighted loss
+- Evaluate: does the model learn to produce more visually-grounded tokens?
+- Measure: mean IIG of generated tokens before/after training
+
+### Why This Matters
+Token-level process rewards are the cutting edge of RL for LLMs (DeepSeek-R1, OpenAI o1). Applying this concept to visual grounding is novel. IIG provides a natural per-token reward signal without needing a separate reward model.
+
+---
+
+## Updated Priority Order
+
+1. **Idea 9**: R_vhad + BoN scoring (immediate, extends current best pipeline)
+2. **Idea 10**: Steering-augmented generation (immediate, extends BoN)
+3. **Idea 14**: Thinking mode drift curve (Figure 1, high impact)
+4. **Idea 15**: Token-level IIG as process reward (novel, high impact)
+5. **Idea 11**: Vision drift penalty in scoring (extends BoN)
+6. **Idea 1**: Two types of vision heads (paper contribution)
+7. **Idea 12**: DAPO + dynamic sampling + IIG (alternative to BoN)
+8. **Idea 3**: Vision drift as training signal (related to Idea 11)
+9. **Idea 7**: Thinking mode analysis (subsumed by Idea 14)
+10. **Idea 13**: Cross-model transfer (novel finding)
+11. **Idea 6**: Proportional steering (simple improvement)
+12. **Idea 2**: Adaptive reward weights (for RL training)
+13. **Idea 4**: Agreement threshold ablation (quick sweep)
+14. **Idea 5**: Cross-modal transfer (subsumed by Idea 13)
+15. **Idea 8**: Compact steering (post-results optimization)
