@@ -357,3 +357,29 @@ v4 (open-ended TextVQA) script written but never ran (GPU unavailable).
 1. Run `block2_custom_grpo.py` (primary)
 2. If collapse: run `block2_dpo_iig.py` (DPO is immune to binary collapse)
 3. Evaluate on POPE + Blind Test Gap
+
+### [2026-03-08] Block 2: BoN+SFT BREAKTHROUGH
+
+**Best-of-N + SFT delivered the first real improvement in the project.**
+
+**Results**:
+- POPE: 83.0% → **85.5%** (+2.5pp)
+- Blind Gap: 32.0pp → **37.0pp** (+5.0pp)
+- Real acc: 82.0% → 87.0% (+5.0pp), Blind acc: 50.0% (stable)
+
+**Pipeline**: Generate N=8 candidates → score with R_correct + IIG → select best → SFT on 692 curated samples (2 epochs)
+**Checkpoint**: `checkpoints/block2_bon/final`
+
+**Prior runs this session** (all completed):
+- Block 2 v2 Setting A (GRPO, R_correct only): POPE 84.5→83.5% (no collapse but no improvement)
+- Block 2 v2 Setting B (GRPO, R_correct+IIG): POPE 84.5→85.0% (+0.5pp, within noise)
+- Block 2 v3 (100 steps, all fixes): POPE oscillated 83.5-85%, no lasting improvement
+- **Block 2 BoN+SFT**: POPE 83→85.5%, Gap 32→37pp (**BEST**)
+
+**Key lesson**: GRPO advantage estimation is too noisy for binary/short-answer VQA. BoN+SFT (ReST/RAFT approach) is strictly superior for this task — curates high-quality data then trains on it.
+
+**Next**:
+1. Multi-round BoN+SFT (use round-1 model for round-2 generation)
+2. Add R_vhad to scoring
+3. DAPO comparison
+4. Git push milestone

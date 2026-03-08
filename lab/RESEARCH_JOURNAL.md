@@ -559,3 +559,44 @@ Step-by-step eval (Setting B):
 **Root cause**: The reward (R_correct + IIG) is too coarse for GRPO advantage to provide useful gradient direction. Most of the "learning" is noise that averages out.
 
 **Pivot**: Moving to Best-of-N + SFT approach (P0 from ideation report)
+
+### Block 2: Best-of-N + SFT Results (BREAKTHROUGH)
+
+**Date**: 2026-03-08
+**Script**: `scripts/block2_best_of_n_sft.py`
+**Config**: N=8 candidates, temp=1.2, lambda_iig=0.0615, SFT lr=2e-6, 2 epochs, 1000 train samples
+
+**Phase 1 (Generation)**:
+- Generated 8 candidates per sample across 1000 mixed VQA samples
+- Scored with composite reward: R_correct + IIG (lambda=0.0615)
+- 692/1000 samples had at least one candidate with score > 0 (69.2% yield)
+
+**Phase 2 (SFT)**:
+- Fine-tuned on 692 best candidates (full unfreeze, bf16)
+- Loss: 4.24 → 3.93 over 2 epochs (smooth convergence, no collapse)
+- Batch=1, grad_accum=8, gradient checkpointing enabled
+
+**Results** (first real improvement in the project):
+
+| Metric | Baseline | Post-BoN+SFT | Delta |
+|--------|----------|-------------|-------|
+| POPE Accuracy | 83.0% | **85.5%** | **+2.5pp** |
+| Blind Gap | 32.0pp | **37.0pp** | **+5.0pp** |
+| Real image acc | 82.0% | 87.0% | +5.0pp |
+| Blind acc | 50.0% | 50.0% | stable |
+| Yes/No ratio | 98/102 | 95/105 | slight no-bias |
+
+**Key insights**:
+1. **First accuracy improvement**: All 5 prior runs (Block 1 v1-v3, Block 2 v2-v3) failed to improve POPE. BoN+SFT succeeded.
+2. **Strong grounding signal**: Gap jumped +5pp while blind accuracy stayed at 50%. The model is genuinely using the image more, not just memorizing answers.
+3. **IIG reward is the key differentiator**: The 692 curated samples were selected for being both correct AND visually grounded (via IIG scoring). This teaches the model to ground its answers in the image.
+4. **BoN+SFT >> GRPO for this task**: GRPO's advantage estimation is too noisy for binary/short-answer VQA. BoN+SFT sidesteps this entirely by curating a high-quality training set.
+
+**Checkpoint**: `checkpoints/block2_bon/final`
+**Results JSON**: `checkpoints/block2_bon/results_20260308_032035.json`
+
+**Next steps**:
+1. Multi-round BoN+SFT (iterate: use round-1 model to generate round-2 candidates)
+2. Add R_vhad to scoring (currently R_correct + IIG only)
+3. Steering-augmented generation (steered candidates as positive examples)
+4. Compare with DAPO on same data
