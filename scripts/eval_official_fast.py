@@ -211,6 +211,7 @@ def main():
     # ── Group 2: BoN+SFT checkpoints ──
     bon_paths = [
         ("bon_r1", "checkpoints/block2_bon/final"),
+        ("dapo_short", "checkpoints/dapo/dapo_short/final"),
     ]
     for name, path in bon_paths:
         if not Path(path).exists():
@@ -240,7 +241,7 @@ def main():
             json.dump({"records": data["records"], "metrics": data["metrics"]}, f, indent=2)
 
     # Compute blind gaps
-    for base in ["baseline", "steered", "bon_r1"]:
+    for base in ["baseline", "steered", "bon_r1", "dapo_short"]:
         blind_key = f"{base}_blind"
         if base in summary["conditions"] and blind_key in summary["conditions"]:
             real = summary["conditions"][base]["acc"]
