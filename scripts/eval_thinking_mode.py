@@ -83,17 +83,24 @@ def load_model(model_path=None):
     return model, processor, model_info
 
 
+THINKING_SYSTEM_PROMPT = (
+    "Think step by step before answering. "
+    "Wrap your reasoning in <think>...</think> tags, then provide the final answer."
+)
+
+
 def build_inputs(model_info, question, image, thinking=True):
     processor = model_info["processor"]
-    messages = [{"role": "user", "content": []}]
+    messages = []
+    if thinking:
+        messages.append({"role": "system", "content": THINKING_SYSTEM_PROMPT})
+    messages.append({"role": "user", "content": []})
     if image is not None:
-        messages[0]["content"].append({"type": "image", "image": image})
-    messages[0]["content"].append({"type": "text", "text": question})
+        messages[-1]["content"].append({"type": "image", "image": image})
+    messages[-1]["content"].append({"type": "text", "text": question})
 
-    # Enable thinking by NOT disabling it — Qwen3 defaults to thinking when enabled
     text = processor.apply_chat_template(
         messages, tokenize=False, add_generation_prompt=True,
-        enable_thinking=thinking,
     )
     inputs = processor(
         text=[text],
@@ -274,7 +281,6 @@ def eval_pope_thinking(model, model_info, n_samples=200, max_thinking=512):
                     **inputs,
                     max_new_tokens=max_thinking + 64,  # thinking + answer
                     do_sample=False,
-                    enable_thinking=True,
                 )
             pred = model_info["tokenizer"].decode(
                 out[0][inputs["input_ids"].shape[1]:], skip_special_tokens=False,
@@ -326,7 +332,7 @@ def eval_blind_thinking(model, model_info, n_samples=100, max_thinking=512):
             inputs_r = build_inputs(model_info, prompt, s.get("image"), thinking=True)
             with torch.no_grad():
                 out_r = model.generate(**inputs_r, max_new_tokens=max_thinking + 64,
-                                       do_sample=False, enable_thinking=True)
+                                       do_sample=False)
             pred_r = model_info["tokenizer"].decode(
                 out_r[0][inputs_r["input_ids"].shape[1]:], skip_special_tokens=False)
 
@@ -334,7 +340,7 @@ def eval_blind_thinking(model, model_info, n_samples=100, max_thinking=512):
             inputs_b = build_inputs(model_info, prompt, black_img, thinking=True)
             with torch.no_grad():
                 out_b = model.generate(**inputs_b, max_new_tokens=max_thinking + 64,
-                                       do_sample=False, enable_thinking=True)
+                                       do_sample=False)
             pred_b = model_info["tokenizer"].decode(
                 out_b[0][inputs_b["input_ids"].shape[1]:], skip_special_tokens=False)
 
