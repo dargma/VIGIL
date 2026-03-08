@@ -325,3 +325,35 @@ Prior V-LENS work: `/content/drive/MyDrive/V-LENS/`
 - `lab/reports/` — 7 figures + markdown report
 
 **Next**: Block 1 Minimal GRPO (50 steps, R_correct vs R_correct+IIG)
+
+### [2026-03-07] Block 1 GRPO: 3 Attempts, All Collapsed
+
+**TRL GRPOTrainer is not viable for binary VQA at 2B scale.**
+
+| Version | Config Changes | Result | Collapse Mode |
+|---------|---------------|--------|---------------|
+| v1 | group=4, temp=1.0, lr=5e-6, LoRA r=16, 50 steps | POPE 76→31% | always-no |
+| v2 | group=8, temp=1.2, lr=2e-6, LoRA r=8, 20 steps + format reward | POPE 76→30% | always-yes |
+| v3 | beta=0.1, lr=5e-7, LoRA r=4, 5 steps (ultra-conservative) | POPE 77→31% | always-yes |
+
+IIG reward worked correctly in all 3 runs (100% positive, mean~1.0) but could not prevent collapse.
+v4 (open-ended TextVQA) script written but never ran (GPU unavailable).
+
+**Root cause**: Binary VQA has ~1 bit output entropy → GRPO groups have no diversity → zero advantage → collapse.
+
+### [2026-03-07] Block 2 Pivot: Custom GRPO + DPO (CPU-only prep)
+
+**Scripts prepared (no GPU needed):**
+1. `scripts/block2_custom_grpo.py` — Manual GRPO loop with:
+   - Entropy bonus (beta_entropy=0.01), dynamic temperature
+   - Mixed data (non-binary only: TextVQA + A-OKVQA MC + VQAv2 short-answer)
+   - Zero-variance group skipping, collapse detection
+   - IIG integration (lambda=0.0615)
+2. `scripts/block2_dpo_iig.py` — DPO with IIG-ranked preference pairs (fallback)
+3. `scripts/prepare_mixed_data.py` — Mixed non-binary training data pipeline
+4. `configs/training.yaml` updated with `custom_grpo`, `dpo`, `iig` sections
+
+**When GPU returns:**
+1. Run `block2_custom_grpo.py` (primary)
+2. If collapse: run `block2_dpo_iig.py` (DPO is immune to binary collapse)
+3. Evaluate on POPE + Blind Test Gap

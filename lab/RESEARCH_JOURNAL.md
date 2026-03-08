@@ -429,3 +429,116 @@ Trained models are degenerate (always "no") so heatmap comparison is baseline-on
 3. **DPO with IIG-based preferences**: rank candidates by IIG, train to prefer high-IIG responses
 4. **SFT on high-IIG samples**: filter VQAv2 for samples where model gives correct answer + high IIG, fine-tune
 5. **GRPO on Thinking mode directly** (Block 3): longer outputs → more diversity → GRPO works better
+
+---
+
+## 2026-03-07 Session 3 — v3 Collapsed + Pivot Planning (CPU-only)
+
+### v3 Final Results (ultra-conservative: beta=0.1, lr=5e-7, LoRA r=4, 5 steps)
+- Both (A) correct-only and (B) correct+IIG collapsed identically
+- Step 0: POPE=77.0%, Step 5: POPE=31.0% (always-yes, 31/100)
+- IIG: mean=1.002, std=0.212, 100% positive — IIG works, GRPO doesn't
+- v4 (open-ended TextVQA GRPO): script written but never ran (GPU unavailable)
+
+### Root Cause Analysis: Why TRL GRPO Collapses on Binary VQA
+1. **Output entropy ~1 bit**: Only "yes" or "no" viable. Group of 8 often all agree → zero advantage → zero gradient on those steps. When they disagree, gradient is noisy.
+2. **No entropy regularization in TRL**: Standard GRPOTrainer has no mechanism to prevent policy collapse. Only KL penalty, which is backward-looking (prevents drift from ref) not forward-looking (prevents entropy collapse).
+3. **Reward is 0/1**: No partial credit, no gradient information about "direction" of improvement.
+4. **Small model + binary task**: 2B model can trivially memorize "always yes" shortcut in <5 gradient steps.
+
+### Pivot Strategy (CPU-only preparation)
+Three parallel approaches prepared without GPU:
+
+**Approach 1: Custom manual GRPO** (`scripts/block2_custom_grpo.py`)
+- Bypass TRL entirely. Manual generation → reward → advantage → PPO-style loss
+- Key additions: entropy bonus (L = L_pg - beta_H * H(pi)), dynamic temperature, zero-variance group skipping
+- Mixed data (not binary-only): TextVQA open-ended + A-OKVQA MC + VQAv2 non-binary
+- Collapse detection: monitor yes/no balance, halt if >90% same answer
+- Two settings: (A) R_correct only, (B) R_correct + IIG
+
+**Approach 2: DPO with IIG preferences** (`scripts/block2_dpo_iig.py`)
+- Phase 1: Generate K=8 candidates per sample, rank by vigil_reward (R_correct + lambda*IIG)
+- Phase 2: Train DPO on (chosen=high-reward, rejected=low-reward) pairs
+- DPO doesn't use group-relative advantage → immune to binary collapse
+- More stable but less exploratory than GRPO
+
+**Approach 3: Mixed data preparation** (`scripts/prepare_mixed_data.py`)
+- Filter VQAv2 to exclude binary yes/no answers
+- Balance: 40% open-ended + 30% MC + 30% short-answer
+- POPE overlap checking baked in
+
+### Next Steps (when GPU available)
+1. Run `scripts/block2_custom_grpo.py` — primary approach
+2. If collapse recurs: run `scripts/block2_dpo_iig.py --phase 1` then `--phase 2`
+3. Compare both against baseline on POPE + Blind Test Gap
+
+---
+
+## 2026-03-08 Session 1 — Block 2 v2: First Successful GRPO (A100 40GB)
+
+### Setup
+- **GPU**: NVIDIA A100-SXM4-40GB
+- **Model**: Qwen3-VL-2B-Instruct, bf16, FULL UNFREEZE (no LoRA)
+- **Script**: `scripts/block2_custom_grpo_v2.py` — custom GRPO, no TRL
+- **Data**: Mixed non-binary (734 VQAv2 short-answer + 600 A-OKVQA MC + 666 TextVQA)
+- **Config**: group_size=8, lr=5e-7, temp=1.4, max_new_tokens=64, 50 steps x2 samples/step
+
+### v1 Attempt (LoRA) — Failed
+- Ran `block2_custom_grpo.py` with LoRA r=16. POPE baseline was 29% (wrong).
+- Root cause: verbose model outputs + bad answer extraction (checked first 10 chars only).
+- Also: 80% groups skipped, only 5GB/40GB GPU used.
+
+### v2 Fixes
+1. Full unfreeze instead of LoRA (entire 2.1B params trainable)
+2. Better prompt: "Answer yes or no only." / "Answer in a few words."
+3. Better answer extraction: `extract_yesno()` checks first 50 chars
+4. Gradient checkpointing (for full model backprop on A100)
+5. Top-4 candidates by |advantage| for gradient (memory saving)
+6. Batch generation via `num_return_sequences`
+
+### Results — Setting A (R_correct only) vs Setting B (R_correct + IIG)
+
+| Metric | Baseline | Setting A | Setting B |
+|--------|----------|-----------|-----------|
+| POPE Acc | 84.5% | 83.5% (-1.0pp) | **85.0% (+0.5pp)** |
+| Blind Gap | 35.0pp | 33.0pp (-2.0pp) | **36.0pp (+1.0pp)** |
+| Skip rate | — | 62% | **46%** |
+| Collapse? | — | **No** | **No** |
+
+Step-by-step eval (Setting B):
+- Step 0: POPE=84.5%, Gap=35.0pp
+- Step 10: POPE=85.0%, Gap=35.0pp (already improving)
+- Step 20: POPE=85.0%, Gap=36.0pp (+1pp!)
+- Step 30: POPE=84.0%, Gap=34.0pp (dip)
+- Step 40: POPE=84.0%, Gap=34.0pp
+- Step 50: POPE=85.0%, Gap=36.0pp (recovered)
+
+### Key Findings
+
+1. **First non-collapsing GRPO run ever.** Full unfreeze + mixed non-binary data = stable.
+2. **IIG reward helps**: Setting B beat Setting A by +1.5pp POPE and +3pp Gap.
+3. **IIG reduces skip rate**: 46% vs 62% — IIG adds continuous reward variance.
+4. **BUT learning signal still too weak**: 50 steps at lr=5e-7 barely moves the model. Need 10x more effective training.
+
+### Known Issues (from code verification agent)
+1. **KL bug (CRITICAL)**: ref logprobs = current logprobs → KL=0 always. No policy constraint.
+2. **Partial credit bug**: substring match gives 0.5 for wrong answers (e.g., "car" in "carnival").
+3. **Conservative LR**: 5e-7 with 50 steps produces negligible parameter updates.
+
+### Agent Reports Generated
+- `lab/reports/block2_settingA_analysis.md` — detailed training dynamics analysis
+- `lab/reports/block2v2_code_review.md` — 6 bugs found (2 critical)
+- `lab/reports/block2_ideation.md` — 8 prioritized ideas for improvement
+
+### Checkpoints
+- Setting A: `checkpoints/block2_v2/final/`
+- Setting B: `checkpoints/block2_v2_B/final/`
+- Results: `lab/results/block2_v2/block2v2_{A,B}_*.json`
+
+### Next Steps
+1. Fix KL bug (add frozen ref model copy — only +4GB on A100)
+2. Remove partial credit substring match
+3. Increase lr to 2e-6 (4x), num_steps to 100 (2x)
+4. Increase group_size to 16 (reduce skip rate further)
+5. Run v3 with all fixes → expect measurable POPE improvement
+6. If v3 GRPO plateaus: try Best-of-N + SFT (P0 idea from ideation agent)

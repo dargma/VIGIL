@@ -55,6 +55,42 @@ dapo:
   eval_every: 10
   seed: 42
 
+iig:
+  lambda: 0.0615  # auto-calibrated from Block 0
+  eps: 0.1
+  black_image_size: [448, 448]
+
+custom_grpo:
+  learning_rate: 2.0e-6
+  beta_kl: 0.05  # KL penalty (higher than TRL default — anti-collapse)
+  beta_entropy: 0.01  # entropy bonus coefficient
+  min_entropy: 0.5  # dynamic entropy threshold
+  epsilon_clip: 0.2
+  group_size: 8
+  max_completion_length: 128
+  temperature: 1.2
+  top_p: 0.95
+  num_steps: 50
+  eval_every: 10
+  eval_samples: 200
+  train_samples: 2000  # mixed data
+  lora_r: 16
+  lora_alpha: 32
+  max_grad_norm: 1.0
+  max_kl: 0.5  # skip update if KL exceeds this
+  collapse_threshold: 0.9  # flag if >90% same answer
+
+dpo:
+  learning_rate: 2.0e-6
+  beta: 0.1
+  num_steps: 50
+  eval_every: 10
+  lora_r: 16
+  lora_alpha: 32
+  max_completion_length: 128
+  candidates_per_sample: 8
+  temperature: 1.2
+
 calibration:
   max_samples: 1000
   min_per_bucket: 5
