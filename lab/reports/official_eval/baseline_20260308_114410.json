@@ -1,0 +1,1622 @@
+{
+  "records": [
+    {
+      "index": 0,
+      "question": "Is there a snowboard in the image?",
+      "answer": "Yes",
+      "prediction": "yes",
+      "extracted": "Yes",
+      "category": "adversarial"
+    },
+    {
+      "index": 1,
+      "question": "Is there a backpack in the image?",
+      "answer": "No",
+      "prediction": "no",
+      "extracted": "No",
+      "category": "adversarial"
+    },
+    {
+      "index": 2,
+      "question": "Is there a person in the image?",
+      "answer": "Yes",
+      "prediction": "yes",
+      "extracted": "Yes",
+      "category": "adversarial"
+    },
+    {
+      "index": 3,
+      "question": "Is there a car in the image?",
+      "answer": "No",
+      "prediction": "no",
+      "extracted": "No",
+      "category": "adversarial"
+    },
+    {
+      "index": 4,
+      "question": "Is there a skis in the image?",
+      "answer": "Yes",
+      "prediction": "no",
+      "extracted": "No",
+      "category": "adversarial"
+    },
+    {
+      "index": 5,
+      "question": "Is there a dog in the image?",
+      "answer": "No",
+      "prediction": "no",
+      "extracted": "No",
+      "category": "adversarial"
+    },
+    {
+      "index": 6,
+      "question": "Is there a truck in the image?",
+      "answer": "Yes",
+      "prediction": "yes",
+      "extracted": "Yes",
+      "category": "adversarial"
+    },
+    {
+      "index": 7,
+      "question": "Is there a car in the image?",
+      "answer": "No",
+      "prediction": "yes",
+      "extracted": "Yes",
+      "category": "adversarial"
+    },
+    {
+      "index": 8,
+      "question": "Is there a person in the image?",
+      "answer": "Yes",
+      "prediction": "yes",
+      "extracted": "Yes",
+      "category": "adversarial"
+    },
+    {
+      "index": 9,
+      "question": "Is there a dining table in the image?",
+      "answer": "No",
+      "prediction": "no",
+      "extracted": "No",
+      "category": "adversarial"
+    },
+    {
+      "index": 10,
+      "question": "Is there an umbrella in the imange?",
+      "answer": "Yes",
+      "prediction": "yes",
+      "extracted": "Yes",
+      "category": "adversarial"
+    },
+    {
+      "index": 11,
+      "question": "Is there a handbag in the image?",
+      "answer": "No",
+      "prediction": "no",
+      "extracted": "No",
+      "category": "adversarial"
+    },
+    {
+      "index": 12,
+      "question": "Is there a person in the image?",
+      "answer": "Yes",
+      "prediction": "yes",
+      "extracted": "Yes",
+      "category": "adversarial"
+    },
+    {
+      "index": 13,
+      "question": "Is there a dining table in the image?",
+      "answer": "No",
+      "prediction": "no",
+      "extracted": "No",
+      "category": "adversarial"
+    },
+    {
+      "index": 14,
+      "question": "Is there a bicycle in the image?",
+      "answer": "Yes",
+      "prediction": "yes",
+      "extracted": "Yes",
+      "category": "adversarial"
+    },
+    {
+      "index": 15,
+      "question": "Is there a motorcycle in the image?",
+      "answer": "No",
+      "prediction": "no",
+      "extracted": "No",
+      "category": "adversarial"
+    },
+    {
+      "index": 16,
+      "question": "Is there a car in the image?",
+      "answer": "Yes",
+      "prediction": "yes",
+      "extracted": "Yes",
+      "category": "adversarial"
+    },
+    {
+      "index": 17,
+      "question": "Is there a truck in the image?",
+      "answer": "No",
+      "prediction": "yes",
+      "extracted": "Yes",
+      "category": "adversarial"
+    },
+    {
+      "index": 18,
+      "question": "Is there a person in the image?",
+      "answer": "Yes",
+      "prediction": "yes",
+      "extracted": "Yes",
+      "category": "adversarial"
+    },
+    {
+      "index": 19,
+      "question": "Is there a dining table in the image?",
+      "answer": "No",
+      "prediction": "no",
+      "extracted": "No",
+      "category": "adversarial"
+    },
+    {
+      "index": 20,
+      "question": "Is there a potted plant in the image?",
+      "answer": "Yes",
+      "prediction": "no",
+      "extracted": "No",
+      "category": "adversarial"
+    },
+    {
+      "index": 21,
+      "question": "Is there a vase in the image?",
+      "answer": "No",
+      "prediction": "no",
+      "extracted": "No",
+      "category": "adversarial"
+    },
+    {
+      "index": 22,
+      "question": "Is there a car in the image?",
+      "answer": "Yes",
+      "prediction": "no",
+      "extracted": "No",
+      "category": "adversarial"
+    },
+    {
+      "index": 23,
+      "question": "Is there a truck in the image?",
+      "answer": "No",
+      "prediction": "no",
+      "extracted": "No",
+      "category": "adversarial"
+    },
+    {
+      "index": 24,
+      "question": "Is there a traffic light in the image?",
+      "answer": "Yes",
+      "prediction": "yes",
+      "extracted": "Yes",
+      "category": "adversarial"
+    },
+    {
+      "index": 25,
+      "question": "Is there a bus in the image?",
+      "answer": "No",
+      "prediction": "no",
+      "extracted": "No",
+      "category": "adversarial"
+    },
+    {
+      "index": 26,
+      "question": "Is there a person in the image?",
+      "answer": "Yes",
+      "prediction": "yes",
+      "extracted": "Yes",
+      "category": "adversarial"
+    },
+    {
+      "index": 27,
+      "question": "Is there a dining table in the image?",
+      "answer": "No",
+      "prediction": "no",
+      "extracted": "No",
+      "category": "adversarial"
+    },
+    {
+      "index": 28,
+      "question": "Is there a car in the image?",
+      "answer": "Yes",
+      "prediction": "yes",
+      "extracted": "Yes",
+      "category": "adversarial"
+    },
+    {
+      "index": 29,
+      "question": "Is there a truck in the image?",
+      "answer": "No",
+      "prediction": "yes",
+      "extracted": "Yes",
+      "category": "adversarial"
+    },
+    {
+      "index": 30,
+      "question": "Is there a dog in the image?",
+      "answer": "Yes",
+      "prediction": "yes",
+      "extracted": "Yes",
+      "category": "adversarial"
+    },
+    {
+      "index": 31,
+      "question": "Is there a person in the image?",
+      "answer": "No",
+      "prediction": "no",
+      "extracted": "No",
+      "category": "adversarial"
+    },
+    {
+      "index": 32,
+      "question": "Is there a dining table in the image?",
+      "answer": "Yes",
+      "prediction": "yes",
+      "extracted": "Yes",
+      "category": "adversarial"
+    },
+    {
+      "index": 33,
+      "question": "Is there a chair in the image?",
+      "answer": "No",
+      "prediction": "no",
+      "extracted": "No",
+      "category": "adversarial"
+    },
+    {
+      "index": 34,
+      "question": "Is there a bed in the image?",
+      "answer": "Yes",
+      "prediction": "no",
+      "extracted": "No",
+      "category": "adversarial"
+    },
+    {
+      "index": 35,
+      "question": "Is there a book in the image?",
+      "answer": "No",
+      "prediction": "no",
+      "extracted": "No",
+      "category": "adversarial"
+    },
+    {
+      "index": 36,
+      "question": "Is there a person in the image?",
+      "answer": "Yes",
+      "prediction": "yes",
+      "extracted": "Yes",
+      "category": "adversarial"
+    },
+    {
+      "index": 37,
+      "question": "Is there a car in the image?",
+      "answer": "No",
+      "prediction": "no",
+      "extracted": "No",
+      "category": "adversarial"
+    },
+    {
+      "index": 38,
+      "question": "Is there a spoon in the image?",
+      "answer": "Yes",
+      "prediction": "yes",
+      "extracted": "Yes",
+      "category": "adversarial"
+    },
+    {
+      "index": 39,
+      "question": "Is there a cup in the image?",
+      "answer": "No",
+      "prediction": "no",
+      "extracted": "No",
+      "category": "adversarial"
+    },
+    {
+      "index": 40,
+      "question": "Is there a fork in the image?",
+      "answer": "Yes",
+      "prediction": "yes",
+      "extracted": "Yes",
+      "category": "adversarial"
+    },
+    {
+      "index": 41,
+      "question": "Is there a dining table in the image?",
+      "answer": "No",
+      "prediction": "yes",
+      "extracted": "Yes",
+      "category": "adversarial"
+    },
+    {
+      "index": 42,
+      "question": "Is there a tv in the image?",
+      "answer": "Yes",
+      "prediction": "no",
+      "extracted": "No",
+      "category": "adversarial"
+    },
+    {
+      "index": 43,
+      "question": "Is there a person in the image?",
+      "answer": "No",
+      "prediction": "no",
+      "extracted": "No",
+      "category": "adversarial"
+    },
+    {
+      "index": 44,
+      "question": "Is there a toaster in the image?",
+      "answer": "Yes",
+      "prediction": "yes",
+      "extracted": "Yes",
+      "category": "adversarial"
+    },
+    {
+      "index": 45,
+      "question": "Is there a book in the image?",
+      "answer": "No",
+      "prediction": "no",
+      "extracted": "No",
+      "category": "adversarial"
+    },
+    {
+      "index": 46,
+      "question": "Is there a microwave in the image?",
+      "answer": "Yes",
+      "prediction": "yes",
+      "extracted": "Yes",
+      "category": "adversarial"
+    },
+    {
+      "index": 47,
+      "question": "Is there a bottle in the image?",
+      "answer": "No",
+      "prediction": "no",
+      "extracted": "No",
+      "category": "adversarial"
+    },
+    {
+      "index": 48,
+      "question": "Is there a backpack in the image?",
+      "answer": "Yes",
+      "prediction": "yes",
+      "extracted": "Yes",
+      "category": "adversarial"
+    },
+    {
+      "index": 49,
+      "question": "Is there a handbag in the image?",
+      "answer": "No",
+      "prediction": "yes",
+      "extracted": "Yes",
+      "category": "adversarial"
+    },
+    {
+      "index": 50,
+      "question": "Is there a person in the image?",
+      "answer": "Yes",
+      "prediction": "yes",
+      "extracted": "Yes",
+      "category": "adversarial"
+    },
+    {
+      "index": 51,
+      "question": "Is there a car in the image?",
+      "answer": "No",
+      "prediction": "no",
+      "extracted": "No",
+      "category": "adversarial"
+    },
+    {
+      "index": 52,
+      "question": "Is there a skis in the image?",
+      "answer": "Yes",
+      "prediction": "yes",
+      "extracted": "Yes",
+      "category": "adversarial"
+    },
+    {
+      "index": 53,
+      "question": "Is there a snowboard in the image?",
+      "answer": "No",
+      "prediction": "no",
+      "extracted": "No",
+      "category": "adversarial"
+    },
+    {
+      "index": 54,
+      "question": "Is there a bird in the image?",
+      "answer": "Yes",
+      "prediction": "yes",
+      "extracted": "Yes",
+      "category": "adversarial"
+    },
+    {
+      "index": 55,
+      "question": "Is there a handbag in the image?",
+      "answer": "No",
+      "prediction": "no",
+      "extracted": "No",
+      "category": "adversarial"
+    },
+    {
+      "index": 56,
+      "question": "Is there a person in the image?",
+      "answer": "Yes",
+      "prediction": "yes",
+      "extracted": "Yes",
+      "category": "adversarial"
+    },
+    {
+      "index": 57,
+      "question": "Is there a car in the image?",
+      "answer": "No",
+      "prediction": "no",
+      "extracted": "No",
+      "category": "adversarial"
+    },
+    {
+      "index": 58,
+      "question": "Is there a boat in the image?",
+      "answer": "Yes",
+      "prediction": "yes",
+      "extracted": "Yes",
+      "category": "adversarial"
+    },
+    {
+      "index": 59,
+      "question": "Is there a chair in the image?",
+      "answer": "No",
+      "prediction": "no",
+      "extracted": "No",
+      "category": "adversarial"
+    },
+    {
+      "index": 60,
+      "question": "Is there a person in the image?",
+      "answer": "Yes",
+      "prediction": "yes",
+      "extracted": "Yes",
+      "category": "adversarial"
+    },
+    {
+      "index": 61,
+      "question": "Is there a car in the image?",
+      "answer": "No",
+      "prediction": "no",
+      "extracted": "No",
+      "category": "adversarial"
+    },
+    {
+      "index": 62,
+      "question": "Is there an orange in the imange?",
+      "answer": "Yes",
+      "prediction": "yes",
+      "extracted": "Yes",
+      "category": "adversarial"
+    },
+    {
+      "index": 63,
+      "question": "Is there a dining table in the image?",
+      "answer": "No",
+      "prediction": "no",
+      "extracted": "No",
+      "category": "adversarial"
+    },
+    {
+      "index": 64,
+      "question": "Is there a bottle in the image?",
+      "answer": "Yes",
+      "prediction": "yes",
+      "extracted": "Yes",
+      "category": "adversarial"
+    },
+    {
+      "index": 65,
+      "question": "Is there a cup in the image?",
+      "answer": "No",
+      "prediction": "no",
+      "extracted": "No",
+      "category": "adversarial"
+    },
+    {
+      "index": 66,
+      "question": "Is there a backpack in the image?",
+      "answer": "Yes",
+      "prediction": "yes",
+      "extracted": "Yes",
+      "category": "adversarial"
+    },
+    {
+      "index": 67,
+      "question": "Is there a handbag in the image?",
+      "answer": "No",
+      "prediction": "yes",
+      "extracted": "Yes",
+      "category": "adversarial"
+    },
+    {
+      "index": 68,
+      "question": "Is there a person in the image?",
+      "answer": "Yes",
+      "prediction": "yes",
+      "extracted": "Yes",
+      "category": "adversarial"
+    },
+    {
+      "index": 69,
+      "question": "Is there a car in the image?",
+      "answer": "No",
+      "prediction": "no",
+      "extracted": "No",
+      "category": "adversarial"
+    },
+    {
+      "index": 70,
+      "question": "Is there a bus in the image?",
+      "answer": "Yes",
+      "prediction": "yes",
+      "extracted": "Yes",
+      "category": "adversarial"
+    },
+    {
+      "index": 71,
+      "question": "Is there a traffic light in the image?",
+      "answer": "No",
+      "prediction": "no",
+      "extracted": "No",
+      "category": "adversarial"
+    },
+    {
+      "index": 72,
+      "question": "Is there a person in the image?",
+      "answer": "Yes",
+      "prediction": "yes",
+      "extracted": "Yes",
+      "category": "adversarial"
+    },
+    {
+      "index": 73,
+      "question": "Is there a car in the image?",
+      "answer": "No",
+      "prediction": "no",
+      "extracted": "No",
+      "category": "adversarial"
+    },
+    {
+      "index": 74,
+      "question": "Is there a dining table in the image?",
+      "answer": "Yes",
+      "prediction": "yes",
+      "extracted": "Yes",
+      "category": "adversarial"
+    },
+    {
+      "index": 75,
+      "question": "Is there a cup in the image?",
+      "answer": "No",
+      "prediction": "no",
+      "extracted": "No",
+      "category": "adversarial"
+    },
+    {
+      "index": 76,
+      "question": "Is there a chair in the image?",
+      "answer": "Yes",
+      "prediction": "yes",
+      "extracted": "Yes",
+      "category": "adversarial"
+    },
+    {
+      "index": 77,
+      "question": "Is there a couch in the image?",
+      "answer": "No",
+      "prediction": "no",
+      "extracted": "No",
+      "category": "adversarial"
+    },
+    {
+      "index": 78,
+      "question": "Is there a person in the image?",
+      "answer": "Yes",
+      "prediction": "yes",
+      "extracted": "Yes",
+      "category": "adversarial"
+    },
+    {
+      "index": 79,
+      "question": "Is there a car in the image?",
+      "answer": "No",
+      "prediction": "no",
+      "extracted": "No",
+      "category": "adversarial"
+    },
+    {
+      "index": 80,
+      "question": "Is there a sandwich in the image?",
+      "answer": "Yes",
+      "prediction": "yes",
+      "extracted": "Yes",
+      "category": "adversarial"
+    },
+    {
+      "index": 81,
+      "question": "Is there a bowl in the image?",
+      "answer": "No",
+      "prediction": "no",
+      "extracted": "No",
+      "category": "adversarial"
+    },
+    {
+      "index": 82,
+      "question": "Is there a hot dog in the image?",
+      "answer": "Yes",
+      "prediction": "yes",
+      "extracted": "Yes",
+      "category": "adversarial"
+    },
+    {
+      "index": 83,
+      "question": "Is there a handbag in the image?",
+      "answer": "No",
+      "prediction": "yes",
+      "extracted": "Yes",
+      "category": "adversarial"
+    },
+    {
+      "index": 84,
+      "question": "Is there a person in the image?",
+      "answer": "Yes",
+      "prediction": "yes",
+      "extracted": "Yes",
+      "category": "adversarial"
+    },
+    {
+      "index": 85,
+      "question": "Is there a dining table in the image?",
+      "answer": "No",
+      "prediction": "no",
+      "extracted": "No",
+      "category": "adversarial"
+    },
+    {
+      "index": 86,
+      "question": "Is there a car in the image?",
+      "answer": "Yes",
+      "prediction": "yes",
+      "extracted": "Yes",
+      "category": "adversarial"
+    },
+    {
+      "index": 87,
+      "question": "Is there a truck in the image?",
+      "answer": "No",
+      "prediction": "yes",
+      "extracted": "Yes",
+      "category": "adversarial"
+    },
+    {
+      "index": 88,
+      "question": "Is there a frisbee in the image?",
+      "answer": "Yes",
+      "prediction": "yes",
+      "extracted": "Yes",
+      "category": "adversarial"
+    },
+    {
+      "index": 89,
+      "question": "Is there a dog in the image?",
+      "answer": "No",
+      "prediction": "no",
+      "extracted": "No",
+      "category": "adversarial"
+    },
+    {
+      "index": 90,
+      "question": "Is there a knife in the image?",
+      "answer": "Yes",
+      "prediction": "yes",
+      "extracted": "Yes",
+      "category": "adversarial"
+    },
+    {
+      "index": 91,
+      "question": "Is there a cup in the image?",
+      "answer": "No",
+      "prediction": "no",
+      "extracted": "No",
+      "category": "adversarial"
+    },
+    {
+      "index": 92,
+      "question": "Is there a person in the image?",
+      "answer": "Yes",
+      "prediction": "yes",
+      "extracted": "Yes",
+      "category": "adversarial"
+    },
+    {
+      "index": 93,
+      "question": "Is there a car in the image?",
+      "answer": "No",
+      "prediction": "no",
+      "extracted": "No",
+      "category": "adversarial"
+    },
+    {
+      "index": 94,
+      "question": "Is there a cake in the image?",
+      "answer": "Yes",
+      "prediction": "yes",
+      "extracted": "Yes",
+      "category": "adversarial"
+    },
+    {
+      "index": 95,
+      "question": "Is there a bottle in the image?",
+      "answer": "No",
+      "prediction": "no",
+      "extracted": "No",
+      "category": "adversarial"
+    },
+    {
+      "index": 96,
+      "question": "Is there a person in the image?",
+      "answer": "Yes",
+      "prediction": "yes",
+      "extracted": "Yes",
+      "category": "adversarial"
+    },
+    {
+      "index": 97,
+      "question": "Is there a car in the image?",
+      "answer": "No",
+      "prediction": "no",
+      "extracted": "No",
+      "category": "adversarial"
+    },
+    {
+      "index": 98,
+      "question": "Is there a remote in the image?",
+      "answer": "Yes",
+      "prediction": "no",
+      "extracted": "No",
+      "category": "adversarial"
+    },
+    {
+      "index": 99,
+      "question": "Is there a tv in the image?",
+      "answer": "No",
+      "prediction": "no",
+      "extracted": "No",
+      "category": "adversarial"
+    },
+    {
+      "index": 100,
+      "question": "Is there a handbag in the image?",
+      "answer": "Yes",
+      "prediction": "yes",
+      "extracted": "Yes",
+      "category": "adversarial"
+    },
+    {
+      "index": 101,
+      "question": "Is there a backpack in the image?",
+      "answer": "No",
+      "prediction": "no",
+      "extracted": "No",
+      "category": "adversarial"
+    },
+    {
+      "index": 102,
+      "question": "Is there a baseball glove in the image?",
+      "answer": "Yes",
+      "prediction": "yes",
+      "extracted": "Yes",
+      "category": "adversarial"
+    },
+    {
+      "index": 103,
+      "question": "Is there a sports ball in the image?",
+      "answer": "No",
+      "prediction": "no",
+      "extracted": "No",
+      "category": "adversarial"
+    },
+    {
+      "index": 104,
+      "question": "Is there a person in the image?",
+      "answer": "Yes",
+      "prediction": "yes",
+      "extracted": "Yes",
+      "category": "adversarial"
+    },
+    {
+      "index": 105,
+      "question": "Is there a car in the image?",
+      "answer": "No",
+      "prediction": "no",
+      "extracted": "No",
+      "category": "adversarial"
+    },
+    {
+      "index": 106,
+      "question": "Is there a baseball bat in the image?",
+      "answer": "Yes",
+      "prediction": "yes",
+      "extracted": "Yes",
+      "category": "adversarial"
+    },
+    {
+      "index": 107,
+      "question": "Is there a bench in the image?",
+      "answer": "No",
+      "prediction": "yes",
+      "extracted": "Yes",
+      "category": "adversarial"
+    },
+    {
+      "index": 108,
+      "question": "Is there a sink in the image?",
+      "answer": "Yes",
+      "prediction": "yes",
+      "extracted": "Yes",
+      "category": "adversarial"
+    },
+    {
+      "index": 109,
+      "question": "Is there a bottle in the image?",
+      "answer": "No",
+      "prediction": "yes",
+      "extracted": "Yes",
+      "category": "adversarial"
+    },
+    {
+      "index": 110,
+      "question": "Is there a bench in the image?",
+      "answer": "Yes",
+      "prediction": "yes",
+      "extracted": "Yes",
+      "category": "adversarial"
+    },
+    {
+      "index": 111,
+      "question": "Is there a person in the image?",
+      "answer": "No",
+      "prediction": "no",
+      "extracted": "No",
+      "category": "adversarial"
+    },
+    {
+      "index": 112,
+      "question": "Is there a toilet in the image?",
+      "answer": "Yes",
+      "prediction": "yes",
+      "extracted": "Yes",
+      "category": "adversarial"
+    },
+    {
+      "index": 113,
+      "question": "Is there a vase in the image?",
+      "answer": "No",
+      "prediction": "no",
+      "extracted": "No",
+      "category": "adversarial"
+    },
+    {
+      "index": 114,
+      "question": "Is there a person in the image?",
+      "answer": "Yes",
+      "prediction": "yes",
+      "extracted": "Yes",
+      "category": "adversarial"
+    },
+    {
+      "index": 115,
+      "question": "Is there a car in the image?",
+      "answer": "No",
+      "prediction": "no",
+      "extracted": "No",
+      "category": "adversarial"
+    },
+    {
+      "index": 116,
+      "question": "Is there a teddy bear in the image?",
+      "answer": "Yes",
+      "prediction": "yes",
+      "extracted": "Yes",
+      "category": "adversarial"
+    },
+    {
+      "index": 117,
+      "question": "Is there a bed in the image?",
+      "answer": "No",
+      "prediction": "no",
+      "extracted": "No",
+      "category": "adversarial"
+    },
+    {
+      "index": 118,
+      "question": "Is there a bear in the image?",
+      "answer": "Yes",
+      "prediction": "yes",
+      "extracted": "Yes",
+      "category": "adversarial"
+    },
+    {
+      "index": 119,
+      "question": "Is there a couch in the image?",
+      "answer": "No",
+      "prediction": "no",
+      "extracted": "No",
+      "category": "adversarial"
+    },
+    {
+      "index": 120,
+      "question": "Is there a bowl in the image?",
+      "answer": "Yes",
+      "prediction": "no",
+      "extracted": "No",
+      "category": "adversarial"
+    },
+    {
+      "index": 121,
+      "question": "Is there a cup in the image?",
+      "answer": "No",
+      "prediction": "no",
+      "extracted": "No",
+      "category": "adversarial"
+    },
+    {
+      "index": 122,
+      "question": "Is there a spoon in the image?",
+      "answer": "Yes",
+      "prediction": "no",
+      "extracted": "No",
+      "category": "adversarial"
+    },
+    {
+      "index": 123,
+      "question": "Is there a bottle in the image?",
+      "answer": "No",
+      "prediction": "no",
+      "extracted": "No",
+      "category": "adversarial"
+    },
+    {
+      "index": 124,
+      "question": "Is there a sandwich in the image?",
+      "answer": "Yes",
+      "prediction": "yes",
+      "extracted": "Yes",
+      "category": "adversarial"
+    },
+    {
+      "index": 125,
+      "question": "Is there a fork in the image?",
+      "answer": "No",
+      "prediction": "no",
+      "extracted": "No",
+      "category": "adversarial"
+    },
+    {
+      "index": 126,
+      "question": "Is there a bed in the image?",
+      "answer": "Yes",
+      "prediction": "yes",
+      "extracted": "Yes",
+      "category": "adversarial"
+    },
+    {
+      "index": 127,
+      "question": "Is there a person in the image?",
+      "answer": "No",
+      "prediction": "no",
+      "extracted": "No",
+      "category": "adversarial"
+    },
+    {
+      "index": 128,
+      "question": "Is there a cat in the image?",
+      "answer": "Yes",
+      "prediction": "yes",
+      "extracted": "Yes",
+      "category": "adversarial"
+    },
+    {
+      "index": 129,
+      "question": "Is there a couch in the image?",
+      "answer": "No",
+      "prediction": "no",
+      "extracted": "No",
+      "category": "adversarial"
+    },
+    {
+      "index": 130,
+      "question": "Is there a book in the image?",
+      "answer": "Yes",
+      "prediction": "yes",
+      "extracted": "Yes",
+      "category": "adversarial"
+    },
+    {
+      "index": 131,
+      "question": "Is there a tv in the image?",
+      "answer": "No",
+      "prediction": "no",
+      "extracted": "No",
+      "category": "adversarial"
+    },
+    {
+      "index": 132,
+      "question": "Is there a tv in the image?",
+      "answer": "Yes",
+      "prediction": "yes",
+      "extracted": "Yes",
+      "category": "adversarial"
+    },
+    {
+      "index": 133,
+      "question": "Is there a person in the image?",
+      "answer": "No",
+      "prediction": "no",
+      "extracted": "No",
+      "category": "adversarial"
+    },
+    {
+      "index": 134,
+      "question": "Is there a mouse in the image?",
+      "answer": "Yes",
+      "prediction": "yes",
+      "extracted": "Yes",
+      "category": "adversarial"
+    },
+    {
+      "index": 135,
+      "question": "Is there a book in the image?",
+      "answer": "No",
+      "prediction": "no",
+      "extracted": "No",
+      "category": "adversarial"
+    },
+    {
+      "index": 136,
+      "question": "Is there a laptop in the image?",
+      "answer": "Yes",
+      "prediction": "yes",
+      "extracted": "Yes",
+      "category": "adversarial"
+    },
+    {
+      "index": 137,
+      "question": "Is there a bottle in the image?",
+      "answer": "No",
+      "prediction": "no",
+      "extracted": "No",
+      "category": "adversarial"
+    },
+    {
+      "index": 138,
+      "question": "Is there a sink in the image?",
+      "answer": "Yes",
+      "prediction": "yes",
+      "extracted": "Yes",
+      "category": "adversarial"
+    },
+    {
+      "index": 139,
+      "question": "Is there a person in the image?",
+      "answer": "No",
+      "prediction": "no",
+      "extracted": "No",
+      "category": "adversarial"
+    },
+    {
+      "index": 140,
+      "question": "Is there a toothbrush in the image?",
+      "answer": "Yes",
+      "prediction": "no",
+      "extracted": "No",
+      "category": "adversarial"
+    },
+    {
+      "index": 141,
+      "question": "Is there a cup in the image?",
+      "answer": "No",
+      "prediction": "no",
+      "extracted": "No",
+      "category": "adversarial"
+    },
+    {
+      "index": 142,
+      "question": "Is there a bottle in the image?",
+      "answer": "Yes",
+      "prediction": "yes",
+      "extracted": "Yes",
+      "category": "adversarial"
+    },
+    {
+      "index": 143,
+      "question": "Is there a dining table in the image?",
+      "answer": "No",
+      "prediction": "no",
+      "extracted": "No",
+      "category": "adversarial"
+    },
+    {
+      "index": 144,
+      "question": "Is there a truck in the image?",
+      "answer": "Yes",
+      "prediction": "yes",
+      "extracted": "Yes",
+      "category": "adversarial"
+    },
+    {
+      "index": 145,
+      "question": "Is there a person in the image?",
+      "answer": "No",
+      "prediction": "no",
+      "extracted": "No",
+      "category": "adversarial"
+    },
+    {
+      "index": 146,
+      "question": "Is there an airplane in the imange?",
+      "answer": "Yes",
+      "prediction": "yes",
+      "extracted": "Yes",
+      "category": "adversarial"
+    },
+    {
+      "index": 147,
+      "question": "Is there a backpack in the image?",
+      "answer": "No",
+      "prediction": "no",
+      "extracted": "No",
+      "category": "adversarial"
+    },
+    {
+      "index": 148,
+      "question": "Is there a car in the image?",
+      "answer": "Yes",
+      "prediction": "no",
+      "extracted": "No",
+      "category": "adversarial"
+    },
+    {
+      "index": 149,
+      "question": "Is there a bus in the image?",
+      "answer": "No",
+      "prediction": "no",
+      "extracted": "No",
+      "category": "adversarial"
+    },
+    {
+      "index": 150,
+      "question": "Is there a backpack in the image?",
+      "answer": "Yes",
+      "prediction": "yes",
+      "extracted": "Yes",
+      "category": "adversarial"
+    },
+    {
+      "index": 151,
+      "question": "Is there a handbag in the image?",
+      "answer": "No",
+      "prediction": "no",
+      "extracted": "No",
+      "category": "adversarial"
+    },
+    {
+      "index": 152,
+      "question": "Is there a person in the image?",
+      "answer": "Yes",
+      "prediction": "yes",
+      "extracted": "Yes",
+      "category": "adversarial"
+    },
+    {
+      "index": 153,
+      "question": "Is there a car in the image?",
+      "answer": "No",
+      "prediction": "no",
+      "extracted": "No",
+      "category": "adversarial"
+    },
+    {
+      "index": 154,
+      "question": "Is there a skis in the image?",
+      "answer": "Yes",
+      "prediction": "yes",
+      "extracted": "Yes",
+      "category": "adversarial"
+    },
+    {
+      "index": 155,
+      "question": "Is there a snowboard in the image?",
+      "answer": "No",
+      "prediction": "no",
+      "extracted": "No",
+      "category": "adversarial"
+    },
+    {
+      "index": 156,
+      "question": "Is there a tv in the image?",
+      "answer": "Yes",
+      "prediction": "yes",
+      "extracted": "Yes",
+      "category": "adversarial"
+    },
+    {
+      "index": 157,
+      "question": "Is there a dining table in the image?",
+      "answer": "No",
+      "prediction": "no",
+      "extracted": "No",
+      "category": "adversarial"
+    },
+    {
+      "index": 158,
+      "question": "Is there a person in the image?",
+      "answer": "Yes",
+      "prediction": "yes",
+      "extracted": "Yes",
+      "category": "adversarial"
+    },
+    {
+      "index": 159,
+      "question": "Is there a car in the image?",
+      "answer": "No",
+      "prediction": "no",
+      "extracted": "No",
+      "category": "adversarial"
+    },
+    {
+      "index": 160,
+      "question": "Is there a couch in the image?",
+      "answer": "Yes",
+      "prediction": "yes",
+      "extracted": "Yes",
+      "category": "adversarial"
+    },
+    {
+      "index": 161,
+      "question": "Is there a chair in the image?",
+      "answer": "No",
+      "prediction": "no",
+      "extracted": "No",
+      "category": "adversarial"
+    },
+    {
+      "index": 162,
+      "question": "Is there a truck in the image?",
+      "answer": "Yes",
+      "prediction": "yes",
+      "extracted": "Yes",
+      "category": "adversarial"
+    },
+    {
+      "index": 163,
+      "question": "Is there a car in the image?",
+      "answer": "No",
+      "prediction": "no",
+      "extracted": "No",
+      "category": "adversarial"
+    },
+    {
+      "index": 164,
+      "question": "Is there a person in the image?",
+      "answer": "Yes",
+      "prediction": "yes",
+      "extracted": "Yes",
+      "category": "adversarial"
+    },
+    {
+      "index": 165,
+      "question": "Is there a dining table in the image?",
+      "answer": "No",
+      "prediction": "no",
+      "extracted": "No",
+      "category": "adversarial"
+    },
+    {
+      "index": 166,
+      "question": "Is there a cow in the image?",
+      "answer": "Yes",
+      "prediction": "no",
+      "extracted": "No",
+      "category": "adversarial"
+    },
+    {
+      "index": 167,
+      "question": "Is there a bicycle in the image?",
+      "answer": "No",
+      "prediction": "no",
+      "extracted": "No",
+      "category": "adversarial"
+    },
+    {
+      "index": 168,
+      "question": "Is there a dog in the image?",
+      "answer": "Yes",
+      "prediction": "yes",
+      "extracted": "Yes",
+      "category": "adversarial"
+    },
+    {
+      "index": 169,
+      "question": "Is there a frisbee in the image?",
+      "answer": "No",
+      "prediction": "no",
+      "extracted": "No",
+      "category": "adversarial"
+    },
+    {
+      "index": 170,
+      "question": "Is there a truck in the image?",
+      "answer": "Yes",
+      "prediction": "yes",
+      "extracted": "Yes",
+      "category": "adversarial"
+    },
+    {
+      "index": 171,
+      "question": "Is there a traffic light in the image?",
+      "answer": "No",
+      "prediction": "no",
+      "extracted": "No",
+      "category": "adversarial"
+    },
+    {
+      "index": 172,
+      "question": "Is there a person in the image?",
+      "answer": "Yes",
+      "prediction": "yes",
+      "extracted": "Yes",
+      "category": "adversarial"
+    },
+    {
+      "index": 173,
+      "question": "Is there a dining table in the image?",
+      "answer": "No",
+      "prediction": "no",
+      "extracted": "No",
+      "category": "adversarial"
+    },
+    {
+      "index": 174,
+      "question": "Is there a sink in the image?",
+      "answer": "Yes",
+      "prediction": "yes",
+      "extracted": "Yes",
+      "category": "adversarial"
+    },
+    {
+      "index": 175,
+      "question": "Is there a person in the image?",
+      "answer": "No",
+      "prediction": "no",
+      "extracted": "No",
+      "category": "adversarial"
+    },
+    {
+      "index": 176,
+      "question": "Is there a toothbrush in the image?",
+      "answer": "Yes",
+      "prediction": "yes",
+      "extracted": "Yes",
+      "category": "adversarial"
+    },
+    {
+      "index": 177,
+      "question": "Is there a cup in the image?",
+      "answer": "No",
+      "prediction": "no",
+      "extracted": "No",
+      "category": "adversarial"
+    },
+    {
+      "index": 178,
+      "question": "Is there a bottle in the image?",
+      "answer": "Yes",
+      "prediction": "no",
+      "extracted": "No",
+      "category": "adversarial"
+    },
+    {
+      "index": 179,
+      "question": "Is there a dining table in the image?",
+      "answer": "No",
+      "prediction": "no",
+      "extracted": "No",
+      "category": "adversarial"
+    },
+    {
+      "index": 180,
+      "question": "Is there a person in the image?",
+      "answer": "Yes",
+      "prediction": "yes",
+      "extracted": "Yes",
+      "category": "adversarial"
+    },
+    {
+      "index": 181,
+      "question": "Is there a car in the image?",
+      "answer": "No",
+      "prediction": "no",
+      "extracted": "No",
+      "category": "adversarial"
+    },
+    {
+      "index": 182,
+      "question": "Is there a bicycle in the image?",
+      "answer": "Yes",
+      "prediction": "yes",
+      "extracted": "Yes",
+      "category": "adversarial"
+    },
+    {
+      "index": 183,
+      "question": "Is there a motorcycle in the image?",
+      "answer": "No",
+      "prediction": "no",
+      "extracted": "No",
+      "category": "adversarial"
+    },
+    {
+      "index": 184,
+      "question": "Is there an umbrella in the imange?",
+      "answer": "Yes",
+      "prediction": "yes",
+      "extracted": "Yes",
+      "category": "adversarial"
+    },
+    {
+      "index": 185,
+      "question": "Is there a handbag in the image?",
+      "answer": "No",
+      "prediction": "yes",
+      "extracted": "Yes",
+      "category": "adversarial"
+    },
+    {
+      "index": 186,
+      "question": "Is there a person in the image?",
+      "answer": "Yes",
+      "prediction": "yes",
+      "extracted": "Yes",
+      "category": "adversarial"
+    },
+    {
+      "index": 187,
+      "question": "Is there a car in the image?",
+      "answer": "No",
+      "prediction": "no",
+      "extracted": "No",
+      "category": "adversarial"
+    },
+    {
+      "index": 188,
+      "question": "Is there a bicycle in the image?",
+      "answer": "Yes",
+      "prediction": "yes",
+      "extracted": "Yes",
+      "category": "adversarial"
+    },
+    {
+      "index": 189,
+      "question": "Is there a motorcycle in the image?",
+      "answer": "No",
+      "prediction": "no",
+      "extracted": "No",
+      "category": "adversarial"
+    },
+    {
+      "index": 190,
+      "question": "Is there a skateboard in the image?",
+      "answer": "Yes",
+      "prediction": "yes",
+      "extracted": "Yes",
+      "category": "adversarial"
+    },
+    {
+      "index": 191,
+      "question": "Is there a bench in the image?",
+      "answer": "No",
+      "prediction": "yes",
+      "extracted": "Yes",
+      "category": "adversarial"
+    },
+    {
+      "index": 192,
+      "question": "Is there a laptop in the image?",
+      "answer": "Yes",
+      "prediction": "yes",
+      "extracted": "Yes",
+      "category": "adversarial"
+    },
+    {
+      "index": 193,
+      "question": "Is there a person in the image?",
+      "answer": "No",
+      "prediction": "no",
+      "extracted": "No",
+      "category": "adversarial"
+    },
+    {
+      "index": 194,
+      "question": "Is there a remote in the image?",
+      "answer": "Yes",
+      "prediction": "yes",
+      "extracted": "Yes",
+      "category": "adversarial"
+    },
+    {
+      "index": 195,
+      "question": "Is there a couch in the image?",
+      "answer": "No",
+      "prediction": "no",
+      "extracted": "No",
+      "category": "adversarial"
+    },
+    {
+      "index": 196,
+      "question": "Is there a dining table in the image?",
+      "answer": "Yes",
+      "prediction": "no",
+      "extracted": "No",
+      "category": "adversarial"
+    },
+    {
+      "index": 197,
+      "question": "Is there a cup in the image?",
+      "answer": "No",
+      "prediction": "yes",
+      "extracted": "Yes",
+      "category": "adversarial"
+    },
+    {
+      "index": 198,
+      "question": "Is there a snowboard in the image?",
+      "answer": "Yes",
+      "prediction": "no",
+      "extracted": "No",
+      "category": "adversarial"
+    },
+    {
+      "index": 199,
+      "question": "Is there a skis in the image?",
+      "answer": "No",
+      "prediction": "yes",
+      "extracted": "Yes",
+      "category": "adversarial"
+    }
+  ],
+  "metrics": {
+    "Overall": {
+      "acc": 86.0,
+      "f1": 85.99999999999999,
+      "precision": 86.0,
+      "recall": 86.0,
+      "n": 200,
+      "n_unknown": 0
+    },
+    "adversarial": {
+      "acc": 86.0,
+      "f1": 85.99999999999999,
+      "precision": 86.0,
+      "recall": 86.0,
+      "n": 200,
+      "n_unknown": 0
+    }
+  }
+}

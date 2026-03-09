@@ -1,0 +1,46 @@
+{
+  "bon_sft_only": {
+    "pope": {
+      "acc": 87.4,
+      "f1": 86.98347107438016,
+      "precision": 89.95726495726495,
+      "recall": 84.2,
+      "n": 1000,
+      "n_unknown": 0
+    },
+    "blind_gap": 37.400000000000006
+  },
+  "bon_sft_steered_a1": {
+    "pope": {
+      "acc": 87.3,
+      "f1": 86.83937823834196,
+      "precision": 90.10752688172043,
+      "recall": 83.8,
+      "n": 1000,
+      "n_unknown": 0
+    },
+    "blind_gap": 37.3
+  },
+  "bon_sft_steered_a3": {
+    "pope": {
+      "acc": 87.2,
+      "f1": 86.66666666666667,
+      "precision": 90.43478260869566,
+      "recall": 83.2,
+      "n": 1000,
+      "n_unknown": 0
+    },
+    "blind_gap": 37.2
+  },
+  "bon_sft_steered_a5": {
+    "pope": {
+      "acc": 87.1,
+      "f1": 86.54848800834202,
+      "precision": 90.41394335511983,
+      "recall": 83.0,
+      "n": 1000,
+      "n_unknown": 0
+    },
+    "blind_gap": 37.099999999999994
+  }
+}

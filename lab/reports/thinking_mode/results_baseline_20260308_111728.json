@@ -1,0 +1,32 @@
+{
+  "timestamp": "20260308_111728",
+  "model_label": "baseline",
+  "model_path": null,
+  "config": {
+    "model_path": null,
+    "model_label": "baseline",
+    "eval_samples": 200,
+    "drift_samples": 30,
+    "blind_test_samples": 100,
+    "max_thinking_tokens": 512,
+    "output_dir": "lab/reports/thinking_mode",
+    "seed": 42
+  },
+  "pope": {
+    "acc": 34.0,
+    "correct": 68,
+    "total": 200,
+    "yes": 7,
+    "no": 72,
+    "avg_thinking_tokens": 0,
+    "max_thinking_tokens": 0
+  },
+  "blind": {
+    "acc_real": 35.0,
+    "acc_blind": 21.0,
+    "gap": 14.0,
+    "total": 100
+  },
+  "drift": {},
+  "trajectories": []
+}

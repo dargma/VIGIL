@@ -458,3 +458,39 @@ v4 (open-ended TextVQA) script written but never ran (GPU unavailable).
 3. MME + MMBench eval (need pair-based scoring for MME)
 4. DAPO + soft thresholding integration
 5. Git push milestone
+
+### [2026-03-09] Session 5: Autonomous Improvement Lab
+
+**Experiment 1: Steered + BoN+SFT combo (Qwen3)**
+- Result: **No additional benefit** — steering on top of BoN+SFT slightly degrades accuracy
+- BoN+SFT already internalizes steering benefit into weights
+- Methods are substitutes, not complements
+
+| Condition | Acc | P | Gap |
+|-----------|-----|---|-----|
+| BoN+SFT only | **87.4%** | 90.0% | **37.4pp** |
+| +Steered α=1 | 87.3% | 90.1% | 37.3pp |
+| +Steered α=3 | 87.2% | **90.4%** | 37.2pp |
+| +Steered α=5 | 87.1% | **90.4%** | 37.1pp |
+
+**Experiment 2: InternVL Multi-Round BoN+SFT**
+- R1→R2: 82.6% → **83.4%** (+0.8pp), P: 78.8% → **79.9%** (+1.1pp)
+- Gap: 32.6pp → **33.4pp** (+0.8pp)
+- Hit rate increases: 83.0% → 86.6% (self-improvement confirmed)
+- Total improvement from baseline: **+5.2pp acc, +7.8pp precision**
+
+**Files modified/created**:
+- `scripts/autonomous_improvement_lab.py` — NEW, autonomous improvement experiments
+- `scripts/generate_cross_model_report.py` — Updated with new results
+- `lab/reports/multimodel/MULTIMODEL_REPORT.md` — Updated with Session 5 findings
+- `lab/reports/improvement_lab/` — NEW, 3 improvement lab figures + JSON results
+- `lab/reports/multimodel/` — Regenerated 4 cross-model figures
+
+**Checkpoints**:
+- `checkpoints/internvl_bon_sft/round2/` — InternVL BoN+SFT R2
+
+**Key takeaways**:
+1. BoN+SFT is the dominant method across architectures
+2. Steering and BoN+SFT are substitutes, not complements
+3. Multi-round BoN+SFT shows diminishing returns (most gain in R1)
+4. InternVL benefits more from BoN+SFT than Qwen3 (more room to improve)

@@ -31,11 +31,13 @@ def generate_all():
             "BoN+SFT": {"acc": 87.8, "f1": 87.4, "precision": 90.3, "recall": 84.7, "gap": 37.8},
             "DAPO": {"acc": 87.8, "f1": 87.4, "precision": 90.3, "recall": 84.6, "gap": 37.8},
             "BoN+SFT (POPE)": {"acc": 88.0, "f1": 87.7, "precision": 89.9, "recall": 85.6, "gap": 38.0},
+            "BoN+SFT+Steer": {"acc": 87.4, "f1": 87.0, "precision": 90.0, "recall": 84.2, "gap": 37.4},
         },
         "InternVL3.5-1B": {
             "Baseline": {"acc": 78.2, "f1": 80.8, "precision": 72.1, "recall": 92.0, "gap": 28.2},
             "Steered α=1": {"acc": 78.4, "f1": 81.0, "precision": 72.3, "recall": 92.0, "gap": 28.4},
-            "BoN+SFT": {"acc": 82.6, "f1": 83.7, "precision": 78.8, "recall": 89.2, "gap": 32.6},
+            "BoN+SFT R1": {"acc": 82.6, "f1": 83.7, "precision": 78.8, "recall": 89.2, "gap": 32.6},
+            "BoN+SFT R2": {"acc": 83.4, "f1": 84.3, "precision": 79.9, "recall": 89.2, "gap": 33.4},
             "BoN+SFT (POPE)": {"acc": 82.4, "f1": 83.6, "precision": 78.3, "recall": 89.6, "gap": 32.4},
         },
     }
@@ -82,8 +84,8 @@ def generate_all():
     fig, ax = plt.subplots(figsize=(12, 6))
 
     models = ["Qwen3-VL-2B", "InternVL3.5-1B"]
-    methods_order = ["Baseline", "Steered", "BoN+SFT"]
-    colors = {"Baseline": "#607D8B", "Steered": "#03A9F4", "BoN+SFT": "#4CAF50"}
+    methods_order = ["Baseline", "Steered", "BoN+SFT (best)"]
+    colors = {"Baseline": "#607D8B", "Steered": "#03A9F4", "BoN+SFT (best)": "#4CAF50"}
 
     x = np.arange(len(models))
     width = 0.25
@@ -95,6 +97,10 @@ def generate_all():
             if method == "Steered":
                 key = "Steered α=5" if "5" in str(data[model_name].keys()) else "Steered α=1"
                 vals.append(data[model_name].get(key, data[model_name].get("Steered α=1", {})).get("precision", 0))
+            elif method == "BoN+SFT (best)":
+                # Use best BoN+SFT variant per model
+                bon_key = "BoN+SFT R2" if model_name == "InternVL3.5-1B" else "BoN+SFT"
+                vals.append(data[model_name].get(bon_key, {}).get("precision", 0))
             else:
                 vals.append(data[model_name].get(method, {}).get("precision", 0))
 
@@ -114,7 +120,8 @@ def generate_all():
     # Add improvement annotations
     for i, model_name in enumerate(models):
         baseline_p = data[model_name]["Baseline"]["precision"]
-        bon_p = data[model_name]["BoN+SFT"]["precision"]
+        bon_key = "BoN+SFT R2" if model_name == "InternVL3.5-1B" else "BoN+SFT"
+        bon_p = data[model_name][bon_key]["precision"]
         delta = bon_p - baseline_p
         ax.annotate(f"+{delta:.1f}pp",
                     xy=(i + width, bon_p), xytext=(i + width + 0.15, bon_p + 2),
