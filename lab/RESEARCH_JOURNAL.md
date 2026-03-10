@@ -1129,3 +1129,16 @@ With group_size=8, this means 16 extra forwards. Acceptable for training.
 - Pre:  POPE=91.7%, Gap=40.0pp, Think=40w
 - Post: POPE=91.7%, Gap=40.0pp, Think=41w
 - Delta: POPE +0.0pp, Gap +0.0pp
+
+### Phase 2 GRPO-LSR Round 1 (2026-03-10 17:28)
+
+- Full fine-tuning (NO LoRA, NO Unsloth — standard transformers + gradient checkpointing)
+- Config: group=6, T=1.3, lr=2e-6, 15 steps, gated reward
+- Pre:  POPE=91.7%, Gap=40.0pp
+- Post: POPE=93.3%, Gap=42.0pp
+- Delta: POPE +1.6pp, Gap +2.0pp
+- Training correctness: 93% (14/15 active steps)
+- Skip rate: 7% (1/15)
+- Mean LSR: 0.63 (healthy visual grounding signal)
+- Best at step 10 (same as final)
+- Checkpoint: checkpoints/phase2_grpo_lsr/round1/final
