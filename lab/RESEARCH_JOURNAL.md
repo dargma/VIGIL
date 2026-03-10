@@ -1142,3 +1142,12 @@ With group_size=8, this means 16 extra forwards. Acceptable for training.
 - Mean LSR: 0.63 (healthy visual grounding signal)
 - Best at step 10 (same as final)
 - Checkpoint: checkpoints/phase2_grpo_lsr/round1/final
+
+
+### Phase 2 GRPO-LSR Round 2 (2026-03-10 18:23)
+
+- Unsloth full finetune (NO LoRA)
+- Config: group=6, T=1.3, lr=2e-06
+- Pre:  POPE=93.3%, Gap=42.0pp
+- Post: POPE=91.7%, Gap=40.0pp
+- Delta: POPE -1.7pp, Gap -2.0pp
