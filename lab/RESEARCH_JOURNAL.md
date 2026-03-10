@@ -1151,3 +1151,12 @@ With group_size=8, this means 16 extra forwards. Acceptable for training.
 - Pre:  POPE=93.3%, Gap=42.0pp
 - Post: POPE=91.7%, Gap=40.0pp
 - Delta: POPE -1.7pp, Gap -2.0pp
+
+
+### Phase 2 GRPO-LSR Round 3 (2026-03-10 19:11)
+
+- Unsloth full finetune (NO LoRA)
+- Config: group=6, T=1.3, lr=2e-06
+- Pre:  POPE=91.7%, Gap=40.0pp
+- Post: POPE=91.7%, Gap=40.0pp
+- Delta: POPE +0.0pp, Gap +0.0pp
