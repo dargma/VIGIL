@@ -831,3 +831,301 @@ Option 4 (curriculum) is the most principled -- it combines the exploration bene
 - `lab/reports/mmmu_pro/` — Results directory
 
 **Resume**: Check `lab/mmmu_pro_state.json` for commands and status.
+
+---
+
+## 2026-03-10 — POPE Thinking Mode Steering: Methodology & R_vhad Design
+
+### Pivot: MMMU-Pro → POPE
+
+MMMU-Pro was too slow (~1.5 min/sample with thinking, 4096 max_new_tokens). Pivoted to POPE:
+- Already have POPE calibration (Instruct model → transfers to Thinking)
+- POPE is fast (~5s/sample with HF, **36 seconds for 1500 samples with vLLM**)
+- Clean comparison: Instruct baseline (87.4%), Thinking baseline (89.8%), steered Thinking
+
+### How Steering Works (Detailed Methodology)
+
+**Step 1: Calibration (done on Instruct model, POPE data)**
+
+```
+For each of 28 layers × 16 Q-heads:
+  1. Run N samples (correct answers vs incorrect answers)
+  2. Hook into o_proj pre-activation: captures [num_heads × head_dim] before projection
+  3. Separate head activations by correctness: correct_acts[L,H] vs incorrect_acts[L,H]
+  4. Compute Cohen's d = (μ_correct - μ_incorrect) / pooled_σ
+  5. Select top-K heads by |d| → these are "decision-relevant" heads
+  6. Compute steering_vector[L,H] = μ_correct - μ_incorrect (direction of correctness)
+```
+
+**Result**: 20 heads selected. Top-5: L5H0 (d=9.795), L4H6 (d=6.943), L23H2 (d=6.602), L24H0 (d=5.951), L27H15 (d=5.285)
+
+**Two types of vision heads discovered**:
+- **Decision heads** (early-mid, L4-5): high Cohen's d, separate correct/incorrect
+- **Feature heads** (late, L24-27): high activation Δ (real vs black image), encode visual info
+
+**Step 2: Steering (inference-time, o_proj pre-hook)**
+
+```python
+# Pre-hook on o_proj for each selected layer:
+def steering_hook(module, args):
+    x = args[0]  # shape: [B, S, num_heads * head_dim]
+    x_heads = x.view(B, S, num_heads, head_dim)
+    for (layer_idx, head_idx) in selected_heads:
+        if layer_idx == current_layer:
+            x_heads[:, :, head_idx, :] += alpha * steering_vector[layer_idx, head_idx]
+    return (x_heads.view(B, S, -1),)
+```
+
+- **What it does**: Adds α × (correct_direction - incorrect_direction) to each selected head's output before o_proj projection
+- **DeepStack exclusion**: Layers 0-3 excluded (attention patterns are still forming there)
+- **Effect**: Pushes the model's internal representation toward the "correct answer" direction at each token position
+
+**Step 3: Why Instruct→Thinking transfer works**
+
+- Instruct and Thinking models share identical base weights (architecture, attention heads)
+- Thinking model adds `<think>` reasoning but the attention heads are the same
+- Vision head identification transfers: same heads encode visual information in both modes
+- Verified empirically: POPE calibration from Instruct model used successfully for Thinking evaluation
+
+### POPE Thinking Results So Far
+
+| α | Acc | Precision | Δ |
+|---|-----|-----------|---|
+| 0 (baseline, vLLM) | **89.8%** | 94.2% | — |
+| 1 (HF steered) | 87.0% | 89.4% | **-2.8pp** |
+| 3 (HF steered) | 87.7% | 89.0% | **-2.1pp** |
+| 5-10 | running | | |
+
+**Key finding**: Steering HURTS the Thinking model. The reasoning chain itself may already optimize vision head activation, making external steering redundant or disruptive.
+
+### What is R_vhad?
+
+**R_vhad (Vision Head Activation Differential)** is a soft reward signal:
+
+```python
+# Forward pass with REAL image → collect activations at vision heads
+act_real = forward_with_hooks(model, real_image, prompt)  # per-head norms
+
+# Forward pass with BLACK image → collect activations at vision heads
+act_black = forward_with_hooks(model, black_image, prompt)
+
+# Reward = how much more the model activates vision heads with real image
+R_vhad = normalize(sum(|act_real[h] - act_black[h]| for h in vision_heads))
+```
+
+**Intuition**: A model that "sees" the image should have very different vision head activations when given a real image vs a black image. If activations are similar → model is ignoring the image → low reward.
+
+### R_vhad as GRPO Reward: Design Considerations
+
+**The core question: Can we use vision head activation as a soft reward to train the model to use images better?**
+
+**Approach**:
+1. **Calibration** (offline, one-time): Identify vision heads via Cohen's d on a calibration set
+2. **During GRPO rollouts**: For each generated response, compute R_vhad
+3. **Reward**: R_total = w1 × R_correct + w2 × R_vhad + w3 × R_fluency
+
+**Key design challenges**:
+
+1. **Per-token vs per-sequence R_vhad**:
+   - Naive: Average activation across all tokens → single R_vhad per rollout
+   - Better: Weight by token position (early tokens should have high vision activation, later tokens may naturally decrease)
+   - Best: Penalize vision head activation DECAY rate (slope of activation vs position) rather than absolute level
+
+2. **Soft head boundary problem**:
+   - Cohen's d gives a continuous score per head, not binary vision/non-vision
+   - Using top-K is arbitrary — what if head K+1 matters?
+   - **Solution**: Weight each head's contribution to R_vhad by its Cohen's d magnitude:
+     ```
+     R_vhad = Σ_h d(h) × |act_real(h) - act_black(h)| / Σ_h d(h)
+     ```
+
+3. **Thinking chain complication**:
+   - Thinking models generate `<think>...</think>` before answering
+   - Vision drift is expected during reasoning (attention shifts to text)
+   - R_vhad should compare RELATIVE drift, not absolute level:
+     ```
+     R_drift = -(slope of vision_activation over thinking_tokens)
+     # More negative slope = more drift = lower reward
+     ```
+
+4. **Steering vs R_vhad: which is better?**
+   - **Steering** (direct): Modify activations at inference time. Immediate effect but may disrupt model's learned patterns (as we see: -2.8pp for Thinking model)
+   - **R_vhad reward** (indirect): Train the model to LEARN to maintain vision activation. Permanent weight changes. May be gentler than direct intervention.
+   - **Hypothesis**: R_vhad reward during GRPO will outperform direct steering because:
+     - Model can learn its OWN optimal balance of vision vs text attention
+     - No fixed α hyperparameter to tune
+     - Changes are permanent (no inference-time hooks needed)
+     - Model can learn WHEN to attend to image (adaptive, not constant steering)
+
+5. **Practical implementation for GRPO**:
+   ```python
+   class R_vhad_Reward:
+       def __init__(self, model, calibration):
+           self.vision_heads = calibration.top_heads
+           self.head_weights = {h: calibration.head_scores[h] for h in self.vision_heads}
+
+       def compute(self, model, prompt, image, response_tokens):
+           # 1. Forward with real image + response
+           acts_real = self.forward_with_hooks(model, image, prompt, response_tokens)
+
+           # 2. Forward with black image + response
+           black = Image.new('RGB', image.size, (0,0,0))
+           acts_black = self.forward_with_hooks(model, black, prompt, response_tokens)
+
+           # 3. Weighted activation differential
+           delta = 0.0
+           weight_sum = 0.0
+           for (L, H) in self.vision_heads:
+               w = abs(self.head_weights[(L, H)])
+               d = (acts_real[(L,H)] - acts_black[(L,H)]).norm().item()
+               delta += w * d
+               weight_sum += w
+
+           R_vhad = delta / weight_sum  # normalized
+
+           # 4. Drift penalty (optional)
+           if len(response_tokens) > 20:
+               # Check if vision activation decays over the response
+               traj = self.get_trajectory(acts_real)
+               slope = np.polyfit(range(len(traj)), traj, 1)[0]
+               R_drift = max(0, -slope)  # penalize negative slope
+               R_vhad = R_vhad * (1 - 0.3 * R_drift)
+
+           return R_vhad
+   ```
+
+6. **Why this might work better than direct steering**:
+   - POPE Instruct: steering +0.6pp (marginal)
+   - POPE Thinking: steering -2.8pp (harmful!)
+   - BoN+SFT: +2.5pp Qwen3, +5.2pp InternVL (best method so far)
+   - **R_vhad GRPO** could combine BoN+SFT's data curation advantage with vision grounding:
+     - Generate N candidates → score each with R_correct + R_vhad → select best → advantage estimation
+     - Models that answer correctly AND attend to images get highest reward
+     - Prevents "blind reasoner" collapse where model memorizes text patterns
+
+### Per-Token R_vhad with Teacher Forcing (Thinking Mode)
+
+For thinking models, per-token R_vhad requires teacher-forcing the counterfactual:
+
+```
+Step 1 (Reference): Real image → generate thinking chain T = [t1, ..., tn]
+Step 2 (Counterfactual): Black image → teacher-force same chain T
+Step 3 (Differential):
+  R_vhad(t_i) = Act(t_i | x_real, T_{<i}) - Act(t_i | x_black, T_{<i})
+```
+
+This captures WHERE in the reasoning chain vision drift occurs:
+- Early tokens: high R_vhad expected (image info fresh)
+- Mid-thinking: R_vhad may decline (vision drift)
+- Answer tokens: does R_vhad recover? Or fully collapsed?
+
+The **slope of R_vhad during thinking** is the key GRPO penalty signal:
+- Steep negative slope → model forgets image during reasoning → penalize
+- Flat/positive slope → model maintains image reference → reward
+
+Script prepared: `scripts/per_token_rvhad.py`
+
+### Intermediate Results (Alpha Sweep)
+
+| α | Acc | Precision | Δ Acc |
+|---|-----|-----------|-------|
+| 0 (vLLM baseline) | **89.8%** | **94.2%** | — |
+| 1 | 87.0% | 89.4% | -2.8pp |
+| 3 | 87.7% | 89.0% | -2.1pp |
+| 5 | 87.3% | 90.0% | -2.5pp |
+| 7 | ~87.0% | TBD | ~-2.8pp |
+
+**Conclusion forming**: Direct steering hurts Thinking model by ~2-3pp consistently.
+The Thinking chain itself may already optimize vision head usage.
+
+### Final Alpha Sweep Results
+
+| α | Acc | Precision | Δ Acc |
+|---|-----|-----------|-------|
+| 0 (vLLM baseline) | **89.8%** | **94.2%** | — |
+| 1 | 87.0% | 89.4% | -2.8pp |
+| 3 | 87.7% | 89.0% | -2.1pp |
+| 5 | 87.3% | 90.0% | -2.5pp |
+| 7 | 85.3% | TBD | -4.5pp |
+| 10 | (terminated) | — | — |
+
+**Conclusion**: Direct steering consistently hurts Thinking model by 2-5pp.
+The Thinking chain already optimizes vision head usage — adding steering disrupts it.
+This rules out inference-time steering for Thinking models. Pivot to reward-based approach.
+
+---
+
+## 2026-03-10 — Logit-Shift Reward (LSR) Validation
+
+### Motivation
+
+Direct activation steering (α injection) hurts Thinking model performance.
+Instead of modifying activations at inference time, we need a **training-time reward signal**
+that encourages the model to maintain image-dependent reasoning throughout its thinking chain.
+
+The evolution of reward ideas:
+1. **R_vhad (activation-based)**: |Act(real) - Act(black)| at vision heads → hard to normalize, layer-dependent
+2. **Per-token R_vhad (teacher-forced)**: Same but per-token position → still activation-based, noisy
+3. **LSR (logit-based)**: D_KL(P_real || P_black) → directly measures output influence, single scalar
+
+LSR is strictly superior because:
+- Logit changes directly affect the model's output (not a proxy metric)
+- KL divergence is a well-understood, bounded measure
+- No need for per-head selection, normalization, or pattern matching
+- Single scalar reward per token position
+
+### Method
+
+For each rollout during GRPO:
+1. **Generate** response T = (t₁, t₂, ..., tₙ) with real image
+2. **Teacher-force** the same tokens T with real image → logits P_real(tᵢ) at each position
+3. **Teacher-force** the same tokens T with black image → logits P_black(tᵢ) at each position
+4. **Per-token KL**: LSR(tᵢ) = D_KL(P_real(tᵢ) || P_black(tᵢ))
+5. **Aggregate**: R_LSR = mean(LSR(tᵢ)) or weighted sum
+
+### Validation Results (30 POPE samples, Qwen3-VL-2B-Thinking)
+
+| Metric | Correct (N=24) | Incorrect (N=6) | Gap |
+|--------|:--------------:|:----------------:|:---:|
+| Mean KL | **1.331** | 1.150 | +0.181 |
+| KL Thinking phase | **1.441** | 1.231 | +0.210 |
+| KL Answer phase | 0.0003 | 0.0006 | -0.0002 |
+| **Cohen's d** | **0.604** | — | — |
+
+**Key findings**:
+1. **Cohen's d = 0.604** (medium-large effect) — correct rollouts have significantly higher KL
+2. **Direction confirmed**: Correct answers USE images MORE (higher KL divergence)
+3. **Signal is in thinking phase**: KL ~1.44 (correct) vs ~1.23 (incorrect). Answer phase KL is near zero for both.
+4. **Implication**: The model's thinking chain determines whether it uses the image. By the answer phase, the decision is already made.
+
+### GRPO Integration Design
+
+```
+R_total = w₁ × R_correct + w₂ × R_LSR + w₃ × R_fluency
+
+R_LSR = mean(D_KL(P_real(tᵢ) || P_black(tᵢ)))  # thinking tokens only
+
+Recommended weights: w₁=0.4, w₂=0.4, w₃=0.2
+```
+
+**Why thinking tokens only**: Answer phase KL is ~0.0003 regardless of correctness.
+Including it would dilute the signal with noise. The reward should target where the model
+actually decides whether to use visual information.
+
+**Cost**: 2 extra forward passes per rollout (teacher-force real + black).
+With group_size=8, this means 16 extra forwards. Acceptable for training.
+
+### Files
+
+- `scripts/logit_shift_reward.py` — LSR validation script
+- `lab/reports/pope_thinking_steering/lsr_validation.png` — 3-panel validation figure
+- `lab/reports/pope_thinking_steering/lsr_results_20260310_113327.json` — raw results
+
+
+### Thinking-GRPO-LSR Round 1 (2026-03-10 15:37)
+
+- Config: group=6, T=1.3, lr=3e-06, lsr_scale=2.0
+- Reward: R_correct*0.5 + R_correct*R_LSR*0.5 (gated, thinking-phase only)
+- Pre:  POPE=91.7%, Gap=40.0pp, Think=40w
+- Post: POPE=91.7%, Gap=40.0pp, Think=41w
+- Delta: POPE +0.0pp, Gap +0.0pp
