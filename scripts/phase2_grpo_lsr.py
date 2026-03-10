@@ -925,6 +925,11 @@ def run_round(round_num, cfg, train_data, eval_data, model_path=None):
     del model, optimizer
     torch.cuda.empty_cache(); gc.collect()
 
+    # Return best checkpoint if it exists and is better, else final
+    best_path = output_dir / "best"
+    if best_path.exists() and best_acc > pre_pope["acc"]:
+        print(f"  Using BEST checkpoint (acc={best_acc:.1%}) for next round")
+        return history, str(best_path)
     return history, str(output_dir / "final")
 
 
