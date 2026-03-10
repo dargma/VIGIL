@@ -773,3 +773,61 @@ Option 4 (curriculum) is the most principled -- it combines the exploration bene
 - `scripts/eval_official.py` — Single condition eval
 - `scripts/eval_official_fast.py` — Multi-condition eval (loads model once per group)
 - `lab/reports/official_eval/summary_20260308_121500.json` — 3000-sample results
+
+---
+
+## 2026-03-09 — Session 5: Autonomous Improvement Lab
+
+**Completed experiments**:
+
+1. **Steered + BoN+SFT combo (Qwen3-VL-2B)**: No additional benefit. BoN+SFT already internalizes steering benefits — methods are **substitutes, not complements**.
+2. **InternVL3.5-1B Multi-Round BoN+SFT**: R1→R2: 82.6%→83.4% (+0.8pp), total improvement from baseline: +5.2pp acc, +7.8pp precision.
+
+**Key takeaway**: BoN+SFT is the dominant method across architectures. Steering and BoN+SFT are substitutes.
+
+**Files**: `scripts/autonomous_improvement_lab.py`, `lab/reports/multimodel/MULTIMODEL_REPORT.md`
+
+---
+
+## 2026-03-10 — MMMU-Pro Steering Experiment (Thinking Mode)
+
+**Goal**: Evaluate VIGIL steering on MMMU-Pro with Qwen3-VL-2B-Thinking model. MMMU-Pro is a harder reasoning benchmark (10 options, vision-only mode) where thinking mode and visual grounding should matter more than POPE.
+
+**Paper reference**: Qwen3-VL-2B-Thinking MMMU-Pro = **42.5%** (arXiv:2511.21631, Table 4)
+
+**Motivation**:
+- POPE is binary VQA (yes/no) — ceiling is near for 2B model (~88%). Hard to show steering improvement.
+- MMMU-Pro has 10-option MC + vision-only config — more room for steering to help.
+- Thinking mode generates reasoning chains — steering could prevent vision drift during long reasoning.
+- MMMU train split (1050 samples) for calibration, MMMU-Pro (3460 samples) for evaluation.
+
+**Official Qwen3-VL-2B-Thinking eval settings** (from paper §5):
+- Dense thinking: temperature=1.0, top_p=0.95, top_k=20
+- max_new_tokens=4096 (paper: 32768, capped for practical latency)
+- Prompt: VLMEvalKit standard MCQ format with `enable_thinking=True`
+- MMMU-Pro score = avg(standard-10, vision)
+
+**Data downloaded**:
+- MMMU dev+validation: 1050 samples (30 subjects, calibration data)
+- MMMU-Pro standard (10 options): 1730 samples
+- MMMU-Pro vision: 1730 samples
+
+**Pipeline**:
+1. Download ✅
+2. Baseline eval on MMMU-Pro (IN PROGRESS — 200 samples)
+3. Calibrate steering vectors using MMMU dev+validation
+4. Steered eval on MMMU-Pro (α=1,3,5,7)
+
+**Smoke test results (5 samples)**:
+- Standard-10: 40% (2/5), Vision: 0% (0/5), Score: 20%
+- avg_think initially 0w (fixed: `</think>` parsing for prompt-injected `<think>`)
+- ~1.5 min/sample on A100
+
+**Status**: Baseline 200-sample eval running on GPU. ETA ~5h per config.
+
+**Key files**:
+- `scripts/eval_mmmu_pro.py` — Full MMMU-Pro eval with steering support
+- `lab/mmmu_pro_state.json` — Machine-readable state for session resume
+- `lab/reports/mmmu_pro/` — Results directory
+
+**Resume**: Check `lab/mmmu_pro_state.json` for commands and status.

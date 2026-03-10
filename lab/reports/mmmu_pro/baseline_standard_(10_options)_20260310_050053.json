@@ -1,0 +1,55 @@
+{
+  "config": "standard (10 options)",
+  "acc": 20.0,
+  "correct": 2,
+  "total": 10,
+  "avg_thinking_words": 0.0,
+  "elapsed_min": 20.28260796070099,
+  "per_subject": {
+    "Accounting": {
+      "acc": 100.0,
+      "correct": 1,
+      "total": 1
+    },
+    "Agriculture": {
+      "acc": 0.0,
+      "correct": 0,
+      "total": 1
+    },
+    "Art": {
+      "acc": 0.0,
+      "correct": 0,
+      "total": 1
+    },
+    "Design": {
+      "acc": 0.0,
+      "correct": 0,
+      "total": 1
+    },
+    "Energy_and_Power": {
+      "acc": 0.0,
+      "correct": 0,
+      "total": 1
+    },
+    "Finance": {
+      "acc": 0.0,
+      "correct": 0,
+      "total": 1
+    },
+    "History": {
+      "acc": 50.0,
+      "correct": 1,
+      "total": 2
+    },
+    "Literature": {
+      "acc": 0.0,
+      "correct": 0,
+      "total": 1
+    },
+    "Sociology": {
+      "acc": 0.0,
+      "correct": 0,
+      "total": 1
+    }
+  }
+}

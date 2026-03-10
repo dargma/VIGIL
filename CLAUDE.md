@@ -494,3 +494,30 @@ v4 (open-ended TextVQA) script written but never ran (GPU unavailable).
 2. Steering and BoN+SFT are substitutes, not complements
 3. Multi-round BoN+SFT shows diminishing returns (most gain in R1)
 4. InternVL benefits more from BoN+SFT than Qwen3 (more room to improve)
+
+### [2026-03-10] MMMU-Pro Steering Experiment (Thinking Mode)
+
+**Goal**: MMMU-Pro eval with Qwen3-VL-2B-Thinking + VIGIL steering. Harder benchmark (10-option MC + vision-only) where steering should matter more than POPE.
+
+**Paper reference**: Qwen3-VL-2B-Thinking MMMU-Pro = **42.5%** (arXiv:2511.21631)
+
+**Official settings**: temp=1.0, top_p=0.95, top_k=20, max_new_tokens=4096, `enable_thinking=True`
+
+**Data**:
+- Calibration: MMMU dev+val (1050 samples, `data/mmmu_full`)
+- Eval: MMMU-Pro standard-10 (1730) + vision (1730), in `data/eval/mmmu_pro_*`
+
+**Smoke test (5 samples)**: Standard-10: 40%, Vision: 0%, ~1.5 min/sample on A100
+
+**Status**: Baseline 200-sample eval running. Pipeline: baseline → calibrate → steered (α=1,3,5,7).
+
+**Files**:
+- `scripts/eval_mmmu_pro.py` — Full eval script
+- `lab/mmmu_pro_state.json` — Resume state
+- `lab/reports/mmmu_pro/` — Results
+
+**Resume**:
+1. Check status: `ps aux | grep eval_mmmu`
+2. Check results: `cat lab/reports/mmmu_pro/full_results_*.json`
+3. If baseline done: `python scripts/eval_mmmu_pro.py --phase calibrate --cal-samples 500`
+4. Then: `python scripts/eval_mmmu_pro.py --phase steered --max-samples 200 --alphas 1,3,5,7`

@@ -1,0 +1,30 @@
+{
+  "config": "vision",
+  "acc": 0.0,
+  "correct": 0,
+  "total": 5,
+  "avg_thinking_words": 0.0,
+  "elapsed_min": 11.033745996157329,
+  "per_subject": {
+    "Art": {
+      "acc": 0.0,
+      "correct": 0,
+      "total": 1
+    },
+    "Design": {
+      "acc": 0.0,
+      "correct": 0,
+      "total": 1
+    },
+    "History": {
+      "acc": 0.0,
+      "correct": 0,
+      "total": 2
+    },
+    "Literature": {
+      "acc": 0.0,
+      "correct": 0,
+      "total": 1
+    }
+  }
+}
