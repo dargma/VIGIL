@@ -1214,3 +1214,12 @@ With group_size=8, this means 16 extra forwards. Acceptable for training.
 - Pre:  POPE=94.0%, Gap=40.0pp
 - Post: POPE=96.0%, Gap=44.0pp
 - Delta: POPE +2.0pp, Gap +4.0pp
+
+
+### Phase 3 GRPO-LSR v2 Round 4 (2026-03-11 03:33)
+
+- Expanded data (2000 samples), adaptive LSR, curriculum reward
+- Config: group=6, T=1.3, lr=2e-06
+- Pre:  POPE=96.0%, Gap=44.0pp
+- Post: POPE=96.0%, Gap=44.0pp
+- Delta: POPE +0.0pp, Gap +0.0pp

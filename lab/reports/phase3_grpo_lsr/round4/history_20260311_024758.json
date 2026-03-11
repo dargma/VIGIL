@@ -1,0 +1,223 @@
+{
+  "round": 4,
+  "config": {
+    "num_steps": 10,
+    "group_size": 6,
+    "temperature": 1.3,
+    "top_p": 0.95,
+    "max_new_tokens": 512,
+    "min_think_tokens": 32,
+    "lr": 2e-06,
+    "beta_entropy": 0.01,
+    "grad_accum": 2,
+    "max_grad_norm": 1.0,
+    "eval_every": 5,
+    "output_dir": "checkpoints/phase3_grpo_lsr",
+    "train_samples": 2000
+  },
+  "pre_eval": {
+    "pope": {
+      "acc": 0.96,
+      "total": 100,
+      "yes_rate": 0.46,
+      "per_split": {
+        "random": 0.96
+      },
+      "avg_think_words": 42.99
+    },
+    "blind": {
+      "real_acc": 0.94,
+      "blind_acc": 0.5,
+      "gap": 0.43999999999999995,
+      "total": 50
+    }
+  },
+  "steps": [
+    {
+      "step": 1,
+      "loss": 0.0426432304084301,
+      "mean_reward": 0.7488485987176561,
+      "reward_std": 0.04795792080124813,
+      "mean_correct": 1.0,
+      "mean_lsr_raw": 0.4792034725348155,
+      "mean_think_words": 106.16666666666667,
+      "mean_entropy": 0.4996744791666667,
+      "w_correct": 0.6,
+      "w_lsr": 0.4,
+      "elapsed": 51.837584018707275
+    },
+    {
+      "step": 2,
+      "loss": -0.0751953125,
+      "mean_reward": 0.2561155078112039,
+      "reward_std": 0.36220402276538,
+      "mean_correct": 0.3333333333333333,
+      "mean_lsr_raw": 0.232654278477033,
+      "mean_think_words": 140.0,
+      "mean_entropy": 0.5413411458333334,
+      "w_correct": 0.58,
+      "w_lsr": 0.42000000000000004,
+      "elapsed": 124.1172227859497
+    },
+    {
+      "step": 3,
+      "loss": -0.0668131560087204,
+      "mean_reward": 0.692238265467259,
+      "reward_std": 0.3118324744650447,
+      "mean_correct": 0.8333333333333334,
+      "mean_lsr_raw": 0.6725558564066887,
+      "mean_think_words": 82.33333333333333,
+      "mean_entropy": 0.4918619791666667,
+      "w_correct": 0.5599999999999999,
+      "w_lsr": 0.44000000000000006,
+      "elapsed": 74.14460706710815
+    },
+    {
+      "step": 4,
+      "loss": 0.033447265625,
+      "mean_reward": 0.7073531035641877,
+      "reward_std": 0.015260162196640639,
+      "mean_correct": 1.0,
+      "mean_lsr_raw": 0.15539158135652542,
+      "mean_think_words": 80.0,
+      "mean_entropy": 0.2686360677083333,
+      "w_correct": 0.54,
+      "w_lsr": 0.46,
+      "elapsed": 39.255741596221924
+    },
+    {
+      "step": 5,
+      "loss": -0.0711263045668602,
+      "mean_reward": 0.6560099290903167,
+      "reward_std": 0.2946917097653588,
+      "mean_correct": 0.8333333333333334,
+      "mean_lsr_raw": 0.4039333909749985,
+      "mean_think_words": 120.5,
+      "mean_entropy": 0.5524088541666666,
+      "w_correct": 0.52,
+      "w_lsr": 0.48000000000000004,
+      "elapsed": 83.63624119758606
+    },
+    {
+      "step": 6,
+      "loss": -0.0614420585334301,
+      "mean_reward": 0.7959576097205106,
+      "reward_std": 0.023490914985488116,
+      "mean_correct": 1.0,
+      "mean_lsr_raw": 0.5256538242101669,
+      "mean_think_words": 69.83333333333333,
+      "mean_entropy": 0.3170572916666667,
+      "w_correct": 0.5,
+      "w_lsr": 0.5,
+      "elapsed": 36.52861666679382
+    },
+    {
+      "step": 7,
+      "loss": -0.0852864608168602,
+      "mean_reward": 0.7611535505430355,
+      "reward_std": 0.045018601315892116,
+      "mean_correct": 1.0,
+      "mean_lsr_raw": 0.48869970937569934,
+      "mean_think_words": 159.5,
+      "mean_entropy": 0.6552734375,
+      "w_correct": 0.48,
+      "w_lsr": 0.52,
+      "elapsed": 89.09723591804504
+    },
+    {
+      "step": 8,
+      "loss": 0.0220133475959301,
+      "mean_reward": 0.8686522152518604,
+      "reward_std": 0.07538845895502101,
+      "mean_correct": 1.0,
+      "mean_lsr_raw": 1.2885985771814983,
+      "mean_think_words": 38.0,
+      "mean_entropy": 0.13533528645833334,
+      "w_correct": 0.45999999999999996,
+      "w_lsr": 0.54,
+      "elapsed": 25.120981454849243
+    },
+    {
+      "step": 9,
+      "loss": 0.05712890625,
+      "mean_reward": 0.7802577740685585,
+      "reward_std": 0.0627947685740102,
+      "mean_correct": 1.0,
+      "mean_lsr_raw": 1.0861605803171794,
+      "mean_think_words": 46.5,
+      "mean_entropy": 0.25390625,
+      "w_correct": 0.43999999999999995,
+      "w_lsr": 0.56,
+      "elapsed": 27.786258459091187
+    },
+    {
+      "step": 10,
+      "loss": -0.1282552182674408,
+      "mean_reward": 0.323753654311578,
+      "reward_std": 0.3254483203849161,
+      "mean_correct": 0.5,
+      "mean_lsr_raw": 0.5353156824906667,
+      "mean_think_words": 116.16666666666667,
+      "mean_entropy": 0.4386393229166667,
+      "w_correct": 0.41999999999999993,
+      "w_lsr": 0.5800000000000001,
+      "elapsed": 83.0464563369751
+    }
+  ],
+  "evals": [
+    {
+      "step": 5,
+      "pope": {
+        "acc": 0.94,
+        "total": 100,
+        "yes_rate": 0.44,
+        "per_split": {
+          "random": 0.94
+        },
+        "avg_think_words": 37.14
+      },
+      "blind": {
+        "real_acc": 0.9,
+        "blind_acc": 0.5,
+        "gap": 0.4,
+        "total": 50
+      }
+    },
+    {
+      "step": 10,
+      "pope": {
+        "acc": 0.96,
+        "total": 100,
+        "yes_rate": 0.46,
+        "per_split": {
+          "random": 0.96
+        },
+        "avg_think_words": 41.96
+      },
+      "blind": {
+        "real_acc": 0.94,
+        "blind_acc": 0.5,
+        "gap": 0.43999999999999995,
+        "total": 50
+      }
+    }
+  ],
+  "final_eval": {
+    "step": 10,
+    "pope": {
+      "acc": 0.96,
+      "total": 100,
+      "yes_rate": 0.46,
+      "per_split": {
+        "random": 0.96
+      },
+      "avg_think_words": 41.96
+    },
+    "blind": {
+      "real_acc": 0.94,
+      "blind_acc": 0.5,
+      "gap": 0.43999999999999995,
+      "total": 50
+    }
+  }
+}
