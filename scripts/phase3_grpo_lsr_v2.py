@@ -137,7 +137,7 @@ def load_expanded_training_data(limit=4000, seed=42):
     # 2. TextVQA train (1000 short-answer samples)
     print("[data] Loading TextVQA train...")
     try:
-        ds = load_dataset("textvqa", split="train", trust_remote_code=True)
+        ds = load_dataset("facebook/textvqa", split="train")
         tvqa_samples = []
         for row in ds:
             img = row.get("image")
@@ -167,8 +167,8 @@ def load_expanded_training_data(limit=4000, seed=42):
     # 3. GQA balanced val (1000 short-answer samples)
     print("[data] Loading GQA balanced val...")
     try:
-        ds = load_dataset("lmms-lab/GQA", "balanced_val",
-                          split="balanced_val", streaming=True)
+        ds = load_dataset("lmms-lab/GQA", "val_balanced_instructions",
+                          split="val_balanced_instructions", streaming=True)
         gqa_samples = []
         for row in ds:
             img = row.get("image")

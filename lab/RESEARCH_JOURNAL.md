@@ -1178,3 +1178,21 @@ With group_size=8, this means 16 extra forwards. Acceptable for training.
 - Pre:  POPE=93.3%, Gap=42.0pp
 - Post: POPE=93.3%, Gap=42.0pp
 - Delta: POPE +0.0pp, Gap +0.0pp
+
+
+### 1K POPE Evaluation (2026-03-10)
+
+- Evaluated baseline vs Phase 2 GRPO-LSR R4-best on 1000+ POPE samples
+- **Baseline**: Acc=89.9%, Blind Gap=42.5pp (1002 samples)
+- **GRPO-LSR R4-best**: Acc=90.4% (+0.5pp), blind test incomplete (process hung at 1000/1002)
+- Note: 60-sample eval showed larger gains (91.7→95.0%) — 1K eval shows more conservative but real improvement
+- Conclusion: Phase 2 GRPO-LSR provides genuine but modest improvement on larger eval set
+
+
+### Phase 3 GRPO-LSR v2 Round 1 (2026-03-11 01:17)
+
+- Expanded data (2000 samples), adaptive LSR, curriculum reward
+- Config: group=6, T=1.3, lr=2e-06
+- Pre:  POPE=96.0%, Gap=44.0pp
+- Post: POPE=96.0%, Gap=44.0pp
+- Delta: POPE +0.0pp, Gap +0.0pp
