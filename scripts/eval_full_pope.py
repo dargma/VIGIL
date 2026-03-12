@@ -18,6 +18,8 @@ from datetime import datetime
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
+from qwen_vl_utils import process_vision_info
+
 HF_ID = "Qwen/Qwen3-VL-2B-Thinking"
 POPE_SPLITS = ["random", "popular", "adversarial"]
 BEST_CKPT = "checkpoints/phase2_grpo_lsr/round4/best"
@@ -108,7 +110,6 @@ def load_model(model_path=None):
 
 
 def prepare_inputs(processor, image, question, device):
-    from qwen_vl_utils import process_vision_info
     content = [{"type": "image", "image": image},
                {"type": "text", "text": question}]
     messages = [{"role": "user", "content": content}]
@@ -129,6 +130,7 @@ def evaluate_pope(model, processor, samples, device, label=""):
     """Full POPE evaluation with per-split metrics."""
     per_split = defaultdict(lambda: {"tp": 0, "fp": 0, "tn": 0, "fn": 0, "total": 0})
     think_lengths = []
+    error_count = 0
     t0 = time.time()
 
     for i, s in enumerate(samples):
@@ -164,10 +166,16 @@ def evaluate_pope(model, processor, samples, device, label=""):
                       f"acc={total_d/total_n:.1%} ({elapsed:.0f}s)", flush=True)
 
         except Exception as e:
+            error_count += 1
+            if error_count <= 3:
+                print(f"  [{label}] ERROR at sample {i} (#{error_count}): {type(e).__name__}: {e}", flush=True)
+            if error_count == 11:
+                print(f"  [{label}] WARNING: {error_count} errors so far — suppressing further error logs", flush=True)
             cat = s.get("category", "unknown")
             per_split[cat]["total"] += 1
-            if (i + 1) % 100 == 0:
-                print(f"  [{label}] {i+1}/{len(samples)} (error: {e})")
+
+    if error_count > 0:
+        print(f"  [{label}] TOTAL ERRORS: {error_count}/{len(samples)} ({error_count/len(samples)*100:.1f}%)", flush=True)
 
     # Compute metrics per split
     results = {}
@@ -213,7 +221,7 @@ def evaluate_pope(model, processor, samples, device, label=""):
 
 def evaluate_blind(model, processor, samples, device, n=200, label=""):
     """Blind test: real vs black image accuracy."""
-    real_correct = blind_correct = total = 0
+    real_correct = blind_correct = total = error_count = 0
     t0 = time.time()
 
     for i, s in enumerate(samples[:n]):
@@ -252,9 +260,16 @@ def evaluate_blind(model, processor, samples, device, n=200, label=""):
                       f"real={ra:.1%} blind={ba:.1%} gap={ra-ba:.1%} ({elapsed:.0f}s)",
                       flush=True)
 
-        except Exception:
+        except Exception as e:
+            error_count += 1
+            if error_count <= 3:
+                print(f"  [{label} blind] ERROR at sample {i} (#{error_count}): {type(e).__name__}: {e}", flush=True)
+            if error_count == 11:
+                print(f"  [{label} blind] WARNING: {error_count} errors so far — suppressing further error logs", flush=True)
             total += 1
 
+    if error_count > 0:
+        print(f"  [{label} blind] TOTAL ERRORS: {error_count}/{n} ({error_count/n*100:.1f}%)", flush=True)
     ra = real_correct / total if total > 0 else 0
     ba = blind_correct / total if total > 0 else 0
     return {"real_acc": ra, "blind_acc": ba, "gap": ra - ba, "total": total}

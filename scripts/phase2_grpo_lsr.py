@@ -761,6 +761,7 @@ def run_round(round_num, cfg, train_data, eval_data, model_path=None):
     output_dir = Path(cfg["output_dir"]) / f"round{round_num}"
     report_dir = Path("lab/reports/phase2_grpo_lsr") / f"round{round_num}"
     output_dir.mkdir(parents=True, exist_ok=True)
+    report_dir.mkdir(parents=True, exist_ok=True)
 
     with open(output_dir / "config.json", "w") as f:
         json.dump(cfg, f, indent=2)
@@ -916,7 +917,6 @@ def run_round(round_num, cfg, train_data, eval_data, model_path=None):
 
     with open(output_dir / f"history_{ts}.json", "w") as f:
         json.dump(history, f, indent=2)
-    report_dir.mkdir(parents=True, exist_ok=True)
     with open(report_dir / f"history_{ts}.json", "w") as f:
         json.dump(history, f, indent=2)
 

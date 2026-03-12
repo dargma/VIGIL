@@ -333,20 +333,50 @@ Token-level process rewards are the cutting edge of RL for LLMs (DeepSeek-R1, Op
 
 ---
 
-## Updated Priority Order
+## Updated Priority Order (2026-03-12)
 
-1. **Idea 9**: R_vhad + BoN scoring (immediate, extends current best pipeline)
-2. **Idea 10**: Steering-augmented generation (immediate, extends BoN)
-3. **Idea 14**: Thinking mode drift curve (Figure 1, high impact)
-4. **Idea 15**: Token-level IIG as process reward (novel, high impact)
-5. **Idea 11**: Vision drift penalty in scoring (extends BoN)
-6. **Idea 1**: Two types of vision heads (paper contribution)
-7. **Idea 12**: DAPO + dynamic sampling + IIG (alternative to BoN)
-8. **Idea 3**: Vision drift as training signal (related to Idea 11)
-9. **Idea 7**: Thinking mode analysis (subsumed by Idea 14)
-10. **Idea 13**: Cross-model transfer (novel finding)
-11. **Idea 6**: Proportional steering (simple improvement)
-12. **Idea 2**: Adaptive reward weights (for RL training)
-13. **Idea 4**: Agreement threshold ablation (quick sweep)
-14. **Idea 5**: Cross-modal transfer (subsumed by Idea 13)
-15. **Idea 8**: Compact steering (post-results optimization)
+### Tier 0: Must-Do (Eval + Paper Essentials)
+1. **1K POPE eval** on best checkpoint (script ready, needs GPU)
+2. **MME eval** on best checkpoint (Perception vs Cognition, script ready)
+3. **Drift curve figure** (Idea 14) — hero Figure 1 for paper
+4. **Full method comparison table** — all conditions on same eval scale
+
+### Tier 1: High-Impact Improvements (from literature review)
+5. **Idea 16: GDPO** — Decoupled reward normalization (NVIDIA, 2026). Drop-in fix: normalize R_correct and R_LSR independently before combining. Currently LSR gets washed out when R_correct dominates. **Effort: LOW, Impact: HIGH.**
+6. **Idea 17: VPPO-style token masking** — Only compute GRPO gradients on high-LSR tokens (ICLR 2026, arXiv:2510.09285). Validated on same problem. **Effort: MEDIUM, Impact: HIGH. Must cite + differentiate.**
+7. **Idea 18: Curriculum filtering** — Train only on samples with 25-75% pass rate. Easy samples give zero variance, hard samples give uninformative negative rewards. This should break the step-10 plateau. **Effort: LOW, Impact: HIGH.**
+8. **Idea 19: DPO with LSR-ranked pairs** — Generate N candidates, rank by R_correct + R_LSR, construct preference pairs. DPO is immune to binary collapse. Alternative path when GRPO plateaus. **Effort: MEDIUM, Impact: MEDIUM-HIGH.**
+
+### Tier 2: Existing Ideas (re-ranked)
+9. **Idea 15**: Token-level IIG as process reward (novel, ties to DeepSeek-R1)
+10. **Idea 9**: R_vhad + BoN scoring (extends best pipeline)
+11. **Idea 1**: Two types of vision heads (paper contribution, already observed)
+12. **Idea 3/11**: Vision drift as training signal / drift penalty in scoring
+13. **Idea 13**: Cross-model transfer (novel finding about architecture)
+14. **Idea 10**: Steering-augmented generation
+15. **Idea 12**: DAPO + dynamic sampling + IIG
+16. **Idea 6**: Proportional steering (simple ablation)
+17. **Idea 2**: Adaptive reward weights
+18. **Idea 4**: Agreement threshold ablation
+19. **Idea 8**: Compact steering via PCA
+
+---
+
+## Key Papers to Cite (from 2026-03-12 literature review)
+
+| Paper | Venue | Relation to VIGIL |
+|-------|-------|-------------------|
+| **Qwen-LookAgain** (arXiv:2505.23558) | 2025 | Same problem (O(1/L) decay), architectural fix. VIGIL = mechanistic fix. |
+| **VPPO** (arXiv:2510.09285) | ICLR 2026 | Closest method. Per-token visual dependency for GRPO reweighting. |
+| **VISTA** (ICML 2025) | ICML 2025 | Inference-only steering. VIGIL adds RL permanence. |
+| **DMAS** (arXiv:2602.21704) | 2026 | Closest competitor. Head-level steering + semantic DB. |
+| **GDPO** (arXiv:2601.05242) | NVIDIA 2026 | Fixes multi-reward normalization for GRPO. |
+| **Vision-SR1** (arXiv:2508.19652) | 2025 | Self-rewarding VLM, behavioral grounding. |
+| **TLDR** (ICLR 2025) | ICLR 2025 | Token-level reward model prior art. |
+| **Perception-R1** (arXiv:2506.07218) | 2025 | Visual perception reward for CoT. |
+| **ASD** (ACL 2025) | ACL 2025 | Activation steering baseline. |
+| **SteerVLM** (EMNLP 2025) | EMNLP 2025 | Learned steering module alternative. |
+| **VEGAS** (arXiv:2512.12089) | 2025 | Encoder-side steering, complementary. |
+
+### VIGIL's Unique Position
+No existing paper combines: (1) head-level mechanistic steering + (2) RL for permanent weight changes + (3) internal activation-based reward (LSR). Qwen-LA = architectural, DMAS/VISTA = inference-only, Vision-SR1 = behavioral, VPPO = closest but no steering component.

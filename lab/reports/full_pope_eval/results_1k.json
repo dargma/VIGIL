@@ -1,0 +1,78 @@
+{
+  "Baseline": {
+    "pope": {
+      "random": {
+        "acc": 0.0,
+        "f1": 0,
+        "precision": 0,
+        "recall": 0,
+        "total": 334
+      },
+      "popular": {
+        "acc": 0.0,
+        "f1": 0,
+        "precision": 0,
+        "recall": 0,
+        "total": 334
+      },
+      "adversarial": {
+        "acc": 0.0,
+        "f1": 0,
+        "precision": 0,
+        "recall": 0,
+        "total": 334
+      },
+      "overall": {
+        "acc": 0.0,
+        "f1": 0,
+        "precision": 0,
+        "recall": 0,
+        "total": 1002
+      }
+    },
+    "blind": {
+      "real_acc": 0.0,
+      "blind_acc": 0.0,
+      "gap": 0.0,
+      "total": 200
+    }
+  },
+  "GRPO-LSR": {
+    "pope": {
+      "random": {
+        "acc": 0.0,
+        "f1": 0,
+        "precision": 0,
+        "recall": 0,
+        "total": 334
+      },
+      "popular": {
+        "acc": 0.0,
+        "f1": 0,
+        "precision": 0,
+        "recall": 0,
+        "total": 334
+      },
+      "adversarial": {
+        "acc": 0.0,
+        "f1": 0,
+        "precision": 0,
+        "recall": 0,
+        "total": 334
+      },
+      "overall": {
+        "acc": 0.0,
+        "f1": 0,
+        "precision": 0,
+        "recall": 0,
+        "total": 1002
+      }
+    },
+    "blind": {
+      "real_acc": 0.0,
+      "blind_acc": 0.0,
+      "gap": 0.0,
+      "total": 200
+    }
+  }
+}

@@ -521,3 +521,34 @@ v4 (open-ended TextVQA) script written but never ran (GPU unavailable).
 2. Check results: `cat lab/reports/mmmu_pro/full_results_*.json`
 3. If baseline done: `python scripts/eval_mmmu_pro.py --phase calibrate --cal-samples 500`
 4. Then: `python scripts/eval_mmmu_pro.py --phase steered --max-samples 200 --alphas 1,3,5,7`
+
+### [2026-03-12] Phase 2 GRPO-LSR Complete + Publication Prep
+
+**Phase 2 GRPO-LSR: COMPLETE (5 rounds, converged)**:
+- Peak: POPE **95.0%**, Blind Gap **44.0pp** (R2 step 10, R4 step 5-10)
+- Converged: POPE **93.3%**, Gap **42.0pp** (R5 stable, no further improvement)
+- R5 showed no gain over R4 best — training has saturated at this scale
+- Best checkpoints: `checkpoints/phase2_grpo_lsr/round2/best`, `round4/best`
+
+**Bug fixes applied**:
+- Round 1 report directory crash: report generation failed when `lab/reports/phase2_grpo_lsr/round1/` didn't exist
+- Eval script silent failures: eval errors were swallowed, now properly raised
+- `qwen-vl-utils` installed (missing dependency for Qwen3-VL image processing)
+
+**Publication figures generated** (5 figures in `lab/reports/phase3_figures/`):
+- POPE accuracy progression across rounds
+- Blind Gap progression
+- LSR dynamics (KL divergence over training steps)
+- Step-wise checkpoint comparison (step 5/10/15)
+- Method comparison (baseline vs BoN+SFT vs GRPO-LSR)
+
+**Evaluation pipeline status**:
+- 1K POPE eval: script ready (`scripts/eval_1k_pope.py`), needs GPU
+- MME eval: script being prepared
+- MMMU-Pro: baseline 200-sample eval was interrupted (needs restart)
+
+**Next**:
+1. Run 1K POPE eval on best checkpoint (R2 or R4 best)
+2. MME eval on best checkpoint
+3. Paper writing: methods section + results tables
+4. Cross-model: try LSR on InternVL Thinking model
