@@ -552,3 +552,39 @@ v4 (open-ended TextVQA) script written but never ran (GPU unavailable).
 2. MME eval on best checkpoint
 3. Paper writing: methods section + results tables
 4. Cross-model: try LSR on InternVL Thinking model
+
+### [2026-03-13] Session 10: Phase 4 GDPO Experiments
+
+**Goal**: Test GDPO (decoupled reward normalization) from fresh Qwen3-VL-2B-Thinking base.
+
+**Case 1: GDPO no-LSR (COMPLETE)**:
+- Config: 50 steps, group=6, T=1.3, lr=2e-6, R_correct=0.7 + R_format=0.3
+- Result: POPE **93.3%** (+1.7pp), Gap **42.0pp** (+2.0pp)
+- 19/50 gradient updates (62% skipped — zero variance in binary rewards)
+- Checkpoint: `checkpoints/phase4_gdpo/no_lsr/final`
+- Log: `logs/phase4_gdpo_no_lsr.log`
+
+**Case 2: GDPO with-LSR (COMPLETE)**:
+- Config: 50 steps, group=6, T=1.3, lr=2e-6, R_correct=0.4 + R_format=0.2 + R_lsr=0.4
+- Result: POPE **91.7%** (no change), Gap **40.0pp** (no change)
+- 50/50 gradient updates (0% skipped — LSR provides continuous variance)
+- Checkpoint: `checkpoints/phase4_gdpo/with_lsr/final`
+- Log: `logs/phase4_gdpo_with_lsr.log`
+
+**Key finding**: LSR eliminates zero-variance skips (good) but dilutes the correctness signal (bad). When all 6 candidates are correct, gradient is driven entirely by LSR — which optimizes for visual sensitivity, not accuracy. The no-LSR variant had fewer but more targeted updates.
+
+**Comparison table**:
+| Model | POPE | Gap | Gradient Updates |
+|-------|------|-----|-----------------|
+| Baseline (HF) | 91.7% | 40.0pp | — |
+| GDPO no-LSR | **93.3%** | **42.0pp** | 19/50 |
+| GDPO with-LSR | 91.7% | 40.0pp | 50/50 |
+| Phase 2 GRPO-LSR (5 rounds) | **95.0%** | **44.0pp** | ~30 effective |
+
+**Reports**: `lab/reports/phase4_gdpo/comparison/`
+
+**Next**:
+1. Try GDPO no-LSR for more steps (100) or with Phase 2 checkpoint as starting point
+2. Try gated LSR: only use LSR when correctness variance is zero
+3. 1K POPE eval on GDPO no-LSR checkpoint
+4. Git commit + push
