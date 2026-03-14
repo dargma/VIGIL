@@ -445,7 +445,7 @@ def compute_decomposed_rewards(model, processor, sample, candidates,
 
         r_lsr_raw = 0.0
         think_tokens = 0
-        if cfg["w_lsr"] > 0:
+        if cfg["w_lsr"] > 0 or cfg.get("gated_lsr", False):
             try:
                 r_lsr_raw, think_tokens = compute_thinking_lsr(
                     model, processor, sample, cand_ids, t_range, device)
@@ -467,7 +467,7 @@ def compute_decomposed_rewards(model, processor, sample, candidates,
         "correct": np.array(r_corrects),
         "format": np.array(r_formats),
     }
-    if cfg["w_lsr"] > 0:
+    if cfg["w_lsr"] > 0 or cfg.get("gated_lsr", False):
         reward_components["lsr"] = np.array(r_lsrs)
 
     return reward_components, details
@@ -830,7 +830,12 @@ def generate_report(history, report_dir):
 def run_gdpo(cfg, train_data, eval_data, model_path=None):
     ts = datetime.now().strftime("%Y%m%d_%H%M%S")
     output_dir = Path(cfg["output_dir"])
-    lsr_tag = "with_lsr" if cfg["w_lsr"] > 0 else "no_lsr"
+    if cfg.get("gated_lsr", False):
+        lsr_tag = "gated_lsr"
+    elif cfg["w_lsr"] > 0:
+        lsr_tag = "with_lsr"
+    else:
+        lsr_tag = "no_lsr"
     report_dir = Path("lab/reports/phase4_gdpo") / lsr_tag
     output_dir.mkdir(parents=True, exist_ok=True)
     report_dir.mkdir(parents=True, exist_ok=True)
@@ -913,8 +918,22 @@ def run_gdpo(cfg, train_data, eval_data, model_path=None):
             continue
 
         # GDPO: decoupled advantage computation
+        # Gated LSR: only include LSR when correctness has zero variance
+        active_components = dict(reward_components)
+        active_weights = dict(weights)
+        lsr_gated_in = False
+        if cfg.get("gated_lsr", False) and "lsr" in active_components:
+            correct_std = reward_components["correct"].std()
+            if correct_std < 1e-4:
+                # Correctness uniform — gate in LSR as the learning signal
+                lsr_gated_in = True
+            else:
+                # Correctness has variance — drop LSR, use correctness + format only
+                del active_components["lsr"]
+                active_weights = {k: v for k, v in weights.items() if k != "lsr"}
+
         advantages, has_variance, reward_stats = compute_gdpo_advantages(
-            reward_components, weights)
+            active_components, active_weights)
 
         if not has_variance:
             elapsed = time.time() - step_t0
@@ -970,11 +989,17 @@ def run_gdpo(cfg, train_data, eval_data, model_path=None):
             "mean_think_words": float(mt),
             "mean_entropy": float(np.mean(lstats["entropy"])) if lstats["entropy"] else 0,
             "reward_stats": reward_stats,
+            "lsr_gated_in": lsr_gated_in if cfg.get("gated_lsr", False) else None,
             "elapsed": elapsed,
         }
         history["steps"].append(step_record)
 
-        lsr_str = f" LSR={ml:.3f}" if cfg["w_lsr"] > 0 else ""
+        lsr_str = ""
+        if cfg.get("gated_lsr", False):
+            gate_tag = "IN" if lsr_gated_in else "OUT"
+            lsr_str = f" LSR={ml:.3f}({gate_tag})"
+        elif cfg["w_lsr"] > 0:
+            lsr_str = f" LSR={ml:.3f}"
         print(f"  [step {step+1}/{cfg['num_steps']}] "
               f"loss={loss.item():.4f} correct={mc:.2f} fmt={mf:.2f}{lsr_str} "
               f"adv_std={advantages.std():.3f} [{var_str}] "
@@ -1055,6 +1080,8 @@ def main():
     parser.add_argument("--lr", type=float, default=2e-6)
     parser.add_argument("--lsr", action="store_true",
                         help="Enable LSR reward (Case 2)")
+    parser.add_argument("--gated-lsr", action="store_true",
+                        help="Gated LSR: use LSR only when correctness has zero variance (Case 3)")
     parser.add_argument("--lsr-scale", type=float, default=2.0)
     parser.add_argument("--min-think-tokens", type=int, default=32)
     parser.add_argument("--max-new-tokens", type=int, default=512)
@@ -1070,7 +1097,10 @@ def main():
 
     # Reward weights: GDPO normalizes each independently, weights control
     # relative importance in the aggregated advantage
-    if args.lsr:
+    if args.gated_lsr:
+        # Gated LSR: compute LSR always, but only include when correctness=0 var
+        w_correct, w_format, w_lsr = 0.7, 0.3, 0.4
+    elif args.lsr:
         w_correct, w_format, w_lsr = 0.4, 0.2, 0.4
     else:
         w_correct, w_format, w_lsr = 0.7, 0.3, 0.0
@@ -1087,6 +1117,7 @@ def main():
         "grad_accum": 2,
         "max_grad_norm": 1.0,
         "lsr_scale": args.lsr_scale,
+        "gated_lsr": args.gated_lsr,
         "eval_every": args.eval_every,
         "output_dir": args.output_dir,
         # Reward weights
