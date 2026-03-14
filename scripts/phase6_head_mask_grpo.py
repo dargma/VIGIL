@@ -1,20 +1,20 @@
 """
 Phase 6: Head-Level Mask LSR-Weighted GRPO
 
-Key innovation over Phase 5 Token-LSR:
-  - Phase 5: per-token KL(logits_real || logits_black) — noisy, mixes all heads
-  - Phase 6: per-token vision HEAD activation Δ(real, black) — targeted, head-specific
-  - Uses calibrated vision heads (Cohen's d) from VIGIL calibration
-  - token_weight(t) = 1.0 + alpha * normalized_head_score(t)
+Key innovations:
+  v1: Head-level activation Δ(real, black) as per-token GRPO weights
+  v2: TextVQA training data (fixes distribution mismatch)
+  v3 (6b): GDPO normalization + curriculum filtering + VPPO token masking
 
-Comparison:
-  Token-LSR:  logits(real) vs logits(black) → KL per token
-  Head-LSR:   vision_heads_act(real) vs vision_heads_act(black) → L2 norm per token
+Three fixes for training instability:
+  1. GDPO: Normalize R_correct and R_head_lsr independently (prevents reward dominance)
+  2. Curriculum: Skip samples where all candidates agree (zero gradient)
+  3. VPPO masking: Zero-out gradients on tokens with head Δ < mean (focused learning)
 
 Usage:
     PYTHONUNBUFFERED=1 python -u scripts/phase6_head_mask_grpo.py \
-        --steps 20 --alpha 0.5 --beta-decay 0.1 \
-        2>&1 | tee logs/phase6_head_mask.log
+        --steps 30 --alpha 0.5 --gdpo --vppo-mask \
+        2>&1 | tee logs/phase6b_head_mask.log
 """
 
 import os, sys, gc, json, re, time, random, argparse, string
@@ -460,16 +460,32 @@ def compute_r_correct(prediction, ground_truth, qtype="short_answer",
 #  Head-Level Weighted Rewards + Loss
 # ══════════════════════════════════════════════════════════════════════
 
+def gdpo_normalize(values, eps=1e-8):
+    """GDPO: Normalize a reward component independently to zero mean, unit std."""
+    arr = np.array(values)
+    std = arr.std()
+    if std < eps:
+        return np.zeros_like(arr)
+    return (arr - arr.mean()) / (std + eps)
+
+
 def compute_rewards_with_head_lsr(model, processor, sample, candidates,
                                    cand_ids_list, think_ranges, prompt_len,
                                    device, cfg, hooks):
-    """Compute rewards AND per-token head-level weights for each candidate."""
-    rewards, details, token_weights_list = [], [], []
+    """Compute rewards AND per-token head-level weights for each candidate.
+
+    v3 changes:
+      - GDPO: normalize R_correct and R_head_lsr independently before combining
+      - VPPO masking: zero-out token weights where head Δ < mean (focused learning)
+    """
+    r_correct_list, r_lsr_list = [], []
+    head_scores_list, think_lens = [], []
+    details, token_weights_list = [], []
     gt = sample["answer"]
     qtype = sample.get("type", "short_answer")
-
     answers_all = sample.get("answers_all")
 
+    # Phase 1: Compute raw rewards for ALL candidates first (needed for GDPO)
     for cand, cand_ids, t_range in zip(candidates, cand_ids_list, think_ranges):
         pred = extract_answer(cand, qtype)
         r_correct = compute_r_correct(pred, gt, qtype, answers_all=answers_all)
@@ -481,15 +497,38 @@ def compute_rewards_with_head_lsr(model, processor, sample, candidates,
             head_scores = torch.zeros(0, device=device)
             mean_score, think_len = 0.0, 0
 
-        # Decay penalty
-        decay_pen = compute_decay_penalty(head_scores) if head_scores.numel() >= 2 else 0.0
-
-        # Gated reward (same structure as Phase 2/5)
         r_lsr = min(mean_score / cfg["lsr_scale"], 1.0)
-        r_total = r_correct * 0.5 + r_correct * r_lsr * 0.5
-        r_total -= cfg["beta_decay"] * decay_pen
 
-        # Build per-token weights
+        r_correct_list.append(r_correct)
+        r_lsr_list.append(r_lsr)
+        head_scores_list.append(head_scores)
+        think_lens.append(think_len)
+
+    # Phase 2: GDPO normalization — normalize each reward component independently
+    use_gdpo = cfg.get("gdpo", False)
+    use_vppo = cfg.get("vppo_mask", False)
+
+    if use_gdpo and len(r_correct_list) > 1:
+        # Independent normalization (GDPO arXiv:2601.05242)
+        w_correct = cfg.get("gdpo_w_correct", 0.6)
+        w_lsr = cfg.get("gdpo_w_lsr", 0.4)
+        norm_correct = gdpo_normalize(r_correct_list)
+        norm_lsr = gdpo_normalize(r_lsr_list)
+        combined = w_correct * norm_correct + w_lsr * norm_lsr
+        rewards = combined.tolist()
+    else:
+        # Legacy gated reward
+        rewards = []
+        for rc, rl in zip(r_correct_list, r_lsr_list):
+            r_total = rc * 0.5 + rc * rl * 0.5
+            rewards.append(r_total)
+
+    # Phase 3: Build per-token weights + decay penalty
+    for i, (cand_ids, t_range) in enumerate(zip(cand_ids_list, think_ranges)):
+        head_scores = head_scores_list[i]
+        decay_pen = compute_decay_penalty(head_scores) if head_scores.numel() >= 2 else 0.0
+        rewards[i] -= cfg["beta_decay"] * decay_pen
+
         t_start, t_end = t_range
         n_tokens = cand_ids.numel()
         token_w = torch.ones(n_tokens, device=device)
@@ -501,16 +540,22 @@ def compute_rewards_with_head_lsr(model, processor, sample, candidates,
             t_start_safe = min(t_start, t_end_safe)
             w_len = min(norm_scores.numel(), t_end_safe - t_start_safe)
             if w_len > 0:
-                token_w[t_start_safe:t_start_safe + w_len] = (
-                    1.0 + cfg["alpha"] * norm_scores[:w_len])
+                if use_vppo:
+                    # VPPO masking: zero-out tokens with below-mean head Δ
+                    # Only compute gradients on visually-grounded tokens
+                    mask = (norm_scores[:w_len] >= 1.0).float()  # >= mean (normalized)
+                    token_w[t_start_safe:t_start_safe + w_len] = (
+                        mask * (1.0 + cfg["alpha"] * norm_scores[:w_len]))
+                else:
+                    token_w[t_start_safe:t_start_safe + w_len] = (
+                        1.0 + cfg["alpha"] * norm_scores[:w_len])
 
-        rewards.append(r_total)
         details.append({
-            "correct": r_correct, "head_score_raw": mean_score,
+            "correct": r_correct_list[i], "head_score_raw": r_lsr_list[i] * cfg["lsr_scale"],
             "decay_penalty": decay_pen,
             "token_weight_mean": token_w.mean().item(),
             "token_weight_max": token_w.max().item(),
-            "think_len": think_len,
+            "think_len": think_lens[i],
         })
         token_weights_list.append(token_w)
 
@@ -796,11 +841,17 @@ def run_training(cfg, train_data, eval_data, model_path=None,
     with open(output_dir / "config.json", "w") as f:
         json.dump(cfg, f, indent=2)
 
+    gdpo_str = "ON" if cfg.get("gdpo") else "OFF"
+    vppo_str = "ON" if cfg.get("vppo_mask") else "OFF"
     print(f"\n{'='*70}")
-    print(f"  Phase 6: Head-Level Mask LSR-Weighted GRPO")
+    print(f"  Phase 6b: Head-Level Mask LSR-Weighted GRPO")
+    print(f"  GDPO={gdpo_str} | VPPO={vppo_str}")
     print(f"  alpha={cfg['alpha']} | beta_decay={cfg['beta_decay']} | "
           f"steps={cfg['num_steps']} | group={cfg['group_size']} | "
           f"T={cfg['temperature']} | lr={cfg['lr']}")
+    if cfg.get("gdpo"):
+        print(f"  GDPO weights: correct={cfg.get('gdpo_w_correct', 0.6)}, "
+              f"lsr={cfg.get('gdpo_w_lsr', 0.4)}")
     print(f"  Vision heads: {len(cfg['vision_heads'])} heads across "
           f"{len(set(l for l,h,d in cfg['vision_heads']))} layers")
     print(f"{'='*70}\n")
@@ -866,10 +917,12 @@ def run_training(cfg, train_data, eval_data, model_path=None,
         rarr = np.array(rewards)
         rstd = rarr.std()
 
-        # Dynamic resampling if zero variance
+        # Curriculum filtering + Dynamic resampling (DAPO-style)
+        # Skip when all candidates agree → zero gradient → wasted step
         if rstd < 1e-8:
             resample_tries = 0
-            while rstd < 1e-8 and resample_tries < 3:
+            max_resample = 5  # Try harder (was 3)
+            while rstd < 1e-8 and resample_tries < max_resample:
                 resample_tries += 1
                 alt_idx = (step * 7 + resample_tries * 13) % len(train_data)
                 alt_sample = train_data[alt_idx]
@@ -897,7 +950,12 @@ def run_training(cfg, train_data, eval_data, model_path=None,
                     "mean_reward": float(rarr.mean())})
                 del candidates, cand_ids_list, inputs; continue
 
-        advantages = ((rarr - rarr.mean()) / (rstd + 1e-8)).tolist()
+        if cfg.get("gdpo", False):
+            # GDPO: rewards are already independently normalized + combined
+            # Just use them directly as advantages (already zero-mean-ish)
+            advantages = ((rarr - rarr.mean()) / (rstd + 1e-8)).tolist()
+        else:
+            advantages = ((rarr - rarr.mean()) / (rstd + 1e-8)).tolist()
 
         # Loss with head-level token weighting
         model.train()
@@ -1037,6 +1095,15 @@ def main():
                         help="Number of top vision heads to use")
     parser.add_argument("--calibration-file", type=str,
                         default="checkpoints/calibration/qwen3_vl_2b/calibration_meta.json")
+    # Phase 6b: GDPO + VPPO
+    parser.add_argument("--gdpo", action="store_true",
+                        help="GDPO: normalize rewards independently")
+    parser.add_argument("--gdpo-w-correct", type=float, default=0.6,
+                        help="GDPO weight for R_correct")
+    parser.add_argument("--gdpo-w-lsr", type=float, default=0.4,
+                        help="GDPO weight for R_head_lsr")
+    parser.add_argument("--vppo-mask", action="store_true",
+                        help="VPPO: zero gradient on low-Δ tokens")
     args = parser.parse_args()
 
     random.seed(args.seed)
