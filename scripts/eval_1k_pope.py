@@ -155,48 +155,58 @@ def eval_blind(model, processor, samples, device, n=200, label=""):
     ba = blind_c/total if total > 0 else 0
     return {"real_acc": ra, "blind_acc": ba, "gap": ra-ba, "total": total}
 
+def eval_one_model(path, label, samples):
+    """Evaluate a single model on POPE + Blind test."""
+    model, processor = load_model(path)
+    device = next(model.parameters()).device
+    pope = eval_pope(model, processor, samples, device, label)
+    blind = eval_blind(model, processor, samples, device, 200, label)
+    print(f"\n{label}: Acc={pope['overall']['acc']:.1%} F1={pope['overall']['f1']:.1%} Gap={blind['gap']:.1%}")
+    del model; torch.cuda.empty_cache(); gc.collect()
+    return {"pope": pope, "blind": blind}
+
 def main():
     samples = load_pope(334)  # ~1000 total
 
+    # All models to evaluate
+    models = [
+        (None, "Baseline"),
+        (BEST_CKPT, "GRPO-LSR"),
+        ("checkpoints/phase4_gdpo/no_lsr/best", "GDPO-noLSR"),
+        ("checkpoints/phase5/dpo/best", "DPO"),
+    ]
+
     all_results = {}
-
-    # Baseline
-    print("\n=== BASELINE ===")
-    model, processor = load_model()
-    device = next(model.parameters()).device
-    pope_b = eval_pope(model, processor, samples, device, "Baseline")
-    blind_b = eval_blind(model, processor, samples, device, 200, "Baseline")
-    all_results["Baseline"] = {"pope": pope_b, "blind": blind_b}
-    print(f"\nBaseline: Acc={pope_b['overall']['acc']:.1%} F1={pope_b['overall']['f1']:.1%} Gap={blind_b['gap']:.1%}")
-    del model; torch.cuda.empty_cache(); gc.collect()
-
-    # GRPO-LSR
-    print("\n=== GRPO-LSR R4-BEST ===")
-    model, processor = load_model(BEST_CKPT)
-    device = next(model.parameters()).device
-    pope_g = eval_pope(model, processor, samples, device, "GRPO-LSR")
-    blind_g = eval_blind(model, processor, samples, device, 200, "GRPO-LSR")
-    all_results["GRPO-LSR"] = {"pope": pope_g, "blind": blind_g}
-    print(f"\nGRPO-LSR: Acc={pope_g['overall']['acc']:.1%} F1={pope_g['overall']['f1']:.1%} Gap={blind_g['gap']:.1%}")
-    del model; torch.cuda.empty_cache(); gc.collect()
+    for path, label in models:
+        ckpt = path
+        if path and not os.path.exists(path):
+            print(f"\n=== SKIPPING {label} (checkpoint not found: {path}) ===")
+            continue
+        print(f"\n=== {label.upper()} ===")
+        all_results[label] = eval_one_model(path, label, samples)
 
     # Summary
-    delta_acc = (pope_g['overall']['acc'] - pope_b['overall']['acc']) * 100
-    delta_gap = (blind_g['gap'] - blind_b['gap']) * 100
+    baseline_acc = all_results.get("Baseline", {}).get("pope", {}).get("overall", {}).get("acc", 0)
+    baseline_gap = all_results.get("Baseline", {}).get("blind", {}).get("gap", 0)
 
-    print("\n" + "="*70)
+    print("\n" + "="*80)
     print("FINAL RESULTS (1K POPE)")
-    print("="*70)
+    print("="*80)
     print(f"{'Cond':<15} {'Split':<12} {'Acc':>6} {'F1':>6} {'P':>6} {'R':>6}")
-    print("-"*70)
+    print("-"*80)
     for cond in all_results:
         for split in POPE_SPLITS + ["overall"]:
             d = all_results[cond]["pope"].get(split, {})
             print(f"{cond:<15} {split:<12} {d['acc']*100:5.1f}% {d['f1']*100:5.1f}% {d['precision']*100:5.1f}% {d['recall']*100:5.1f}%")
-    print("-"*70)
-    print(f"Blind Gap: Baseline={blind_b['gap']*100:.1f}pp, GRPO-LSR={blind_g['gap']*100:.1f}pp (Δ={delta_gap:+.1f}pp)")
-    print(f"POPE Delta: {delta_acc:+.1f}pp")
-    print("="*70)
+    print("-"*80)
+    print(f"\n{'Cond':<15} {'Real Acc':>8} {'Blind Acc':>9} {'Gap':>6} {'Δ Acc':>7} {'Δ Gap':>7}")
+    print("-"*60)
+    for cond, res in all_results.items():
+        b = res["blind"]
+        da = (res["pope"]["overall"]["acc"] - baseline_acc) * 100
+        dg = (b["gap"] - baseline_gap) * 100
+        print(f"{cond:<15} {b['real_acc']*100:7.1f}% {b['blind_acc']*100:8.1f}% {b['gap']*100:5.1f}pp {da:+6.1f}pp {dg:+6.1f}pp")
+    print("="*80)
 
     # Save
     Path("lab/reports/full_pope_eval").mkdir(parents=True, exist_ok=True)

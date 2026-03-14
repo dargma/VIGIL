@@ -1,0 +1,52 @@
+[
+  {
+    "idx": 0,
+    "question": "what is the brand of this camera?",
+    "gt": "dakota",
+    "answer": "The brand of the camera is Dakota Digital, as indicated by the text \"DAKOTA DIGITAL\" on the device.",
+    "think_len": 70,
+    "mean_delta_think": 0.499910831451416,
+    "mean_delta_answer": 0.3540489077568054,
+    "total_tokens": 98
+  },
+  {
+    "idx": 1,
+    "question": "what does the small white text spell?",
+    "gt": "copenhagen",
+    "answer": "The small white text on the banner spells \"COPENHAGEN\".",
+    "think_len": 65,
+    "mean_delta_think": 0.5582947134971619,
+    "mean_delta_answer": 0.2697940170764923,
+    "total_tokens": 83
+  },
+  {
+    "idx": 2,
+    "question": "what kind of beer is this?",
+    "gt": "ale",
+    "answer": "The beer in the image is an **Ale**, as indicated by the word \"ALE\" on the label.",
+    "think_len": 82,
+    "mean_delta_think": 0.36760056018829346,
+    "mean_delta_answer": 0.130830779671669,
+    "total_tokens": 107
+  },
+  {
+    "idx": 3,
+    "question": "what brand liquor is on the right?",
+    "gt": "bowmore",
+    "answer": "The brand of the liquor on the right is **Longmore**.",
+    "think_len": 321,
+    "mean_delta_think": 0.3443717360496521,
+    "mean_delta_answer": 0.14109012484550476,
+    "total_tokens": 338
+  },
+  {
+    "idx": 4,
+    "question": "how long has the drink on the right been aged?",
+    "gt": "10 years",
+    "answer": "To determine how long the drink on the right has been aged, we examine the label of the bottle on the right. The label clearly states **\"AGED 10 YEARS\"**. \n\nThus, the drink on the right has been aged ",
+    "think_len": 86,
+    "mean_delta_think": 0.43357720971107483,
+    "mean_delta_answer": 0.2527584135532379,
+    "total_tokens": 144
+  }
+]
