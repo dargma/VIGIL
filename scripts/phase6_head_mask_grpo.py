@@ -507,11 +507,24 @@ def compute_rewards_with_head_lsr(model, processor, sample, candidates,
     # Phase 2: GDPO normalization — normalize each reward component independently
     use_gdpo = cfg.get("gdpo", False)
     use_vppo = cfg.get("vppo_mask", False)
+    use_gated = cfg.get("gated_head_lsr", False)
+
+    # Gated Head-LSR: check if R_correct has variance
+    correct_has_variance = np.std(r_correct_list) > 1e-6
 
     if use_gdpo and len(r_correct_list) > 1:
         # Independent normalization (GDPO arXiv:2601.05242)
         w_correct = cfg.get("gdpo_w_correct", 0.6)
         w_lsr = cfg.get("gdpo_w_lsr", 0.4)
+
+        if use_gated:
+            if correct_has_variance:
+                # Correctness signal exists → use it alone (targeted updates)
+                w_correct, w_lsr = 1.0, 0.0
+            else:
+                # Zero variance → fall back to head-LSR grounding signal
+                w_correct, w_lsr = 0.0, 1.0
+
         norm_correct = gdpo_normalize(r_correct_list)
         norm_lsr = gdpo_normalize(r_lsr_list)
         combined = w_correct * norm_correct + w_lsr * norm_lsr
@@ -533,7 +546,12 @@ def compute_rewards_with_head_lsr(model, processor, sample, candidates,
         n_tokens = cand_ids.numel()
         token_w = torch.ones(n_tokens, device=device)
 
-        if head_scores.numel() >= 10 and cfg["alpha"] > 0:
+        # Gated Head-LSR: only use head weighting when correctness has no signal
+        alpha_effective = cfg["alpha"]
+        if use_gated:
+            alpha_effective = 0.0 if correct_has_variance else cfg.get("gated_alpha", cfg["alpha"])
+
+        if head_scores.numel() >= 10 and alpha_effective > 0:
             norm_scores = normalize_head_scores(head_scores)
             norm_scores = torch.clamp(norm_scores, 0.0, 5.0)
             t_end_safe = min(t_end, n_tokens)
@@ -545,17 +563,21 @@ def compute_rewards_with_head_lsr(model, processor, sample, candidates,
                     # Only compute gradients on visually-grounded tokens
                     mask = (norm_scores[:w_len] >= 1.0).float()  # >= mean (normalized)
                     token_w[t_start_safe:t_start_safe + w_len] = (
-                        mask * (1.0 + cfg["alpha"] * norm_scores[:w_len]))
+                        mask * (1.0 + alpha_effective * norm_scores[:w_len]))
                 else:
                     token_w[t_start_safe:t_start_safe + w_len] = (
-                        1.0 + cfg["alpha"] * norm_scores[:w_len])
+                        1.0 + alpha_effective * norm_scores[:w_len])
 
+        gate_mode = "standard"
+        if use_gated:
+            gate_mode = "correctness" if correct_has_variance else "head_lsr"
         details.append({
             "correct": r_correct_list[i], "head_score_raw": r_lsr_list[i] * cfg["lsr_scale"],
             "decay_penalty": decay_pen,
             "token_weight_mean": token_w.mean().item(),
             "token_weight_max": token_w.max().item(),
             "think_len": think_lens[i],
+            "gate_mode": gate_mode,
         })
         token_weights_list.append(token_w)
 
@@ -827,6 +849,94 @@ def generate_report(history, report_dir):
 
 
 # ══════════════════════════════════════════════════════════════════════
+#  Curriculum by Think Length
+# ══════════════════════════════════════════════════════════════════════
+
+def prescreen_think_lengths(model, processor, samples, device,
+                            temperature, top_p, max_new_tokens,
+                            min_think_tokens, cache_file=None, max_screen=200):
+    """Generate 1 candidate per sample to estimate think token count.
+
+    Returns dict {sample_idx: think_token_count}.
+    """
+    if cache_file and Path(cache_file).exists():
+        with open(cache_file) as f:
+            cache = {int(k): v for k, v in json.load(f).items()}
+        print(f"[curriculum] Loaded think lengths from cache ({len(cache)} entries)")
+        return cache
+
+    print(f"[curriculum] Pre-screening think lengths ({min(max_screen, len(samples))} samples)...")
+    cache = {}
+    model.eval()
+    for i, sample in enumerate(samples[:max_screen]):
+        try:
+            cands, cand_ids, pl, inp, tranges = generate_candidates(
+                model, processor, sample, 1,
+                temperature, top_p, max_new_tokens,
+                min_think_tokens, device)
+            t_start, t_end = tranges[0]
+            cache[i] = t_end - t_start
+            del cands, cand_ids, inp
+        except Exception:
+            cache[i] = 999
+        if (i + 1) % 50 == 0:
+            print(f"  [curriculum] {i+1}/{min(max_screen, len(samples))} screened")
+
+    # Fill unscreened with median
+    median_len = int(np.median(list(cache.values()))) if cache else 100
+    for i in range(len(samples)):
+        if i not in cache:
+            cache[i] = median_len
+
+    if cache_file:
+        Path(cache_file).parent.mkdir(parents=True, exist_ok=True)
+        with open(cache_file, "w") as f:
+            json.dump(cache, f)
+        print(f"[curriculum] Saved think length cache to {cache_file}")
+
+    short = sum(1 for v in cache.values() if v <= 100)
+    med = sum(1 for v in cache.values() if 100 < v <= 200)
+    long = sum(1 for v in cache.values() if v > 200)
+    print(f"[curriculum] Distribution: short(≤100)={short}, med(101-200)={med}, long(>200)={long}")
+    return cache
+
+
+def build_curriculum_bins(samples, think_cache, thresholds):
+    """Build cumulative sample bins for curriculum phases.
+
+    thresholds: [100, 200, 999] → phase 0 gets ≤100, phase 1 gets ≤200, phase 2 gets all
+    Returns: list of lists, each containing (original_idx, sample) tuples.
+    """
+    bins = [[] for _ in range(len(thresholds))]
+    for i, sample in enumerate(samples):
+        tl = think_cache.get(i, 999)
+        for phase_idx, thresh in enumerate(thresholds):
+            if tl <= thresh:
+                bins[phase_idx].append((i, sample))
+                break
+
+    # Make cumulative: each phase includes all previous
+    cumulative = []
+    running = []
+    for b in bins:
+        running = running + b
+        cumulative.append(list(running))
+
+    for pi, c in enumerate(cumulative):
+        print(f"[curriculum] Phase {pi}: {len(c)} samples available")
+
+    return cumulative
+
+
+def get_curriculum_phase(step, boundaries):
+    """Return 0-based phase index for current step."""
+    for i, b in enumerate(boundaries):
+        if step < b:
+            return i
+    return len(boundaries) - 1
+
+
+# ══════════════════════════════════════════════════════════════════════
 #  Main Training Loop
 # ══════════════════════════════════════════════════════════════════════
 
@@ -843,9 +953,11 @@ def run_training(cfg, train_data, eval_data, model_path=None,
 
     gdpo_str = "ON" if cfg.get("gdpo") else "OFF"
     vppo_str = "ON" if cfg.get("vppo_mask") else "OFF"
+    gated_str = "ON" if cfg.get("gated_head_lsr") else "OFF"
+    curric_str = "ON" if cfg.get("curriculum") else "OFF"
     print(f"\n{'='*70}")
-    print(f"  Phase 6b: Head-Level Mask LSR-Weighted GRPO")
-    print(f"  GDPO={gdpo_str} | VPPO={vppo_str}")
+    print(f"  Phase 6c: Head-Level Mask LSR-Weighted GRPO")
+    print(f"  GDPO={gdpo_str} | VPPO={vppo_str} | Gated={gated_str} | Curriculum={curric_str}")
     print(f"  alpha={cfg['alpha']} | beta_decay={cfg['beta_decay']} | "
           f"steps={cfg['num_steps']} | group={cfg['group_size']} | "
           f"T={cfg['temperature']} | lr={cfg['lr']}")
@@ -868,6 +980,18 @@ def run_training(cfg, train_data, eval_data, model_path=None,
         [p for p in model.parameters() if p.requires_grad],
         lr=cfg["lr"], weight_decay=0.01)
 
+    # Curriculum pre-screening
+    curriculum_bins = None
+    if cfg.get("curriculum"):
+        cache_file = str(output_dir / "think_length_cache.json")
+        think_cache = prescreen_think_lengths(
+            model, processor, train_data, device,
+            cfg["temperature"], cfg["top_p"],
+            cfg["max_new_tokens"], cfg["min_think_tokens"],
+            cache_file=cache_file, max_screen=min(200, len(train_data)))
+        thresholds = cfg.get("curriculum_thresholds", [100, 200, 999])
+        curriculum_bins = build_curriculum_bins(train_data, think_cache, thresholds)
+
     # Pre-eval
     print("Pre-training eval...")
     pre_textvqa = evaluate_textvqa(model, processor, textvqa_eval_data or [], device, 50) \
@@ -889,7 +1013,17 @@ def run_training(cfg, train_data, eval_data, model_path=None,
 
     for step in range(cfg["num_steps"]):
         step_t0 = time.time()
-        sample = train_data[step % len(train_data)]
+
+        # Sample selection: curriculum or round-robin
+        if curriculum_bins is not None:
+            boundaries = cfg.get("curriculum_phases", [10, 20, 30])
+            phase_idx = get_curriculum_phase(step, boundaries)
+            available = curriculum_bins[min(phase_idx, len(curriculum_bins) - 1)]
+            if not available:
+                available = [(i, s) for i, s in enumerate(train_data)]
+            _, sample = available[step % len(available)]
+        else:
+            sample = train_data[step % len(train_data)]
 
         # Generate candidates
         model.eval()
@@ -984,7 +1118,7 @@ def run_training(cfg, train_data, eval_data, model_path=None,
         tw_mean = np.mean([d["token_weight_mean"] for d in details])
         tw_max = np.mean([d["token_weight_max"] for d in details])
 
-        history["steps"].append({
+        step_info = {
             "step": step + 1, "loss": loss.item(),
             "mean_reward": float(rarr.mean()),
             "reward_std": float(rstd),
@@ -995,7 +1129,16 @@ def run_training(cfg, train_data, eval_data, model_path=None,
             "token_weight_max": float(tw_max),
             "mean_entropy": float(np.mean(lstats["entropy"])) if lstats["entropy"] else 0,
             "elapsed": elapsed,
-        })
+        }
+        # Gated Head-LSR tracking
+        if cfg.get("gated_head_lsr"):
+            gate_modes = [d.get("gate_mode", "standard") for d in details]
+            step_info["gate_mode"] = gate_modes[0] if gate_modes else "standard"
+        # Curriculum tracking
+        if curriculum_bins is not None:
+            step_info["curriculum_phase"] = get_curriculum_phase(
+                step, cfg.get("curriculum_phases", [10, 20, 30]))
+        history["steps"].append(step_info)
 
         print(f"  [step {step+1}/{cfg['num_steps']}] "
               f"loss={loss.item():.4f} r={rarr.mean():.3f}±{rstd:.3f} "
@@ -1104,6 +1247,19 @@ def main():
                         help="GDPO weight for R_head_lsr")
     parser.add_argument("--vppo-mask", action="store_true",
                         help="VPPO: zero gradient on low-Δ tokens")
+    # Gated Head-LSR
+    parser.add_argument("--gated-head-lsr", action="store_true",
+                        help="Gate: correctness-only when R_correct has variance, "
+                             "head-LSR when zero variance")
+    parser.add_argument("--gated-alpha", type=float, default=None,
+                        help="Alpha for head-LSR branch (default: same as --alpha)")
+    # Curriculum by think length
+    parser.add_argument("--curriculum", action="store_true",
+                        help="Enable think-length curriculum (short→long)")
+    parser.add_argument("--curriculum-phases", type=str, default="10,20,30",
+                        help="Step boundaries for curriculum phases (comma-separated)")
+    parser.add_argument("--curriculum-thresholds", type=str, default="100,200,999",
+                        help="Max think tokens per phase (comma-separated)")
     args = parser.parse_args()
 
     random.seed(args.seed)
@@ -1129,6 +1285,20 @@ def main():
     cfg = vars(args)
     cfg["num_steps"] = cfg.pop("steps")
     cfg["vision_heads"] = vision_heads
+
+    # Gated Head-LSR
+    cfg["gated_head_lsr"] = cfg.pop("gated_head_lsr", False)
+    if cfg.get("gated_alpha") is None:
+        cfg["gated_alpha"] = cfg["alpha"]
+
+    # Curriculum
+    cfg["curriculum"] = cfg.pop("curriculum", False)
+    if cfg["curriculum"]:
+        cfg["curriculum_phases"] = [int(x) for x in cfg.pop("curriculum_phases", "10,20,30").split(",")]
+        cfg["curriculum_thresholds"] = [int(x) for x in cfg.pop("curriculum_thresholds", "100,200,999").split(",")]
+    else:
+        cfg.pop("curriculum_phases", None)
+        cfg.pop("curriculum_thresholds", None)
 
     train_data = load_training_data(args.train_samples, args.seed)
     pope_eval_data = load_pope_eval(300)
