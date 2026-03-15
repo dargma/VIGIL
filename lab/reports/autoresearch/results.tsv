@@ -13,3 +13,7 @@ phase6_curric_s30	Curriculum	30	90.0	38.0	70.7	Exp2 step 30 (crashed)	2026-03-15
 phase6_combo_s10	Gated+Curriculum	10	95.0	44.0	70.7	Exp3 step 10	2026-03-15
 phase6_combo_s25	Gated+Curriculum	25	95.0	44.0	70.7	Exp3 step 25	2026-03-15
 alpha0_ablation	GDPO_alpha0	10	93.3	42.0	70.7	Alpha=0.0 proves GDPO drives gain	2026-03-14
+exp4_headkl_s15	HeadMaskingKL	15	90.0	38.0	72.7	No improvement, KL signal too weak	2026-03-15
+exp5_learned_kl	LearnedImp+KL	15	90.0	38.0	72.7	All steps SKIP, soft KL=0, FAILED	2026-03-15
+exp6_learned_lsr_s5	LearnedImp+LSR	5	91.7	40.0	72.7	Matches baseline, imp not updating	2026-03-15
+exp6_learned_lsr_s15	LearnedImp+LSR	15	90.0	38.0	70.7	Degraded, importance frozen (detach bug)	2026-03-15

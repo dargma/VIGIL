@@ -202,9 +202,9 @@ Phase 2 (step 21-30): 전체 샘플
 | **Exp1: Gated Head-LSR** | Gated GDPO | **10** | **95.0%** | **44.0pp** | **74.7%** | **Best TextVQA** |
 | Exp2: Curriculum | Curriculum GDPO | 10-15 | 95.0% | 44.0pp | 72.7% | Step 20 dip, 30 crash |
 | Exp3: Gated+Curriculum | Combined | 10-25 | 95.0% | 44.0pp | 70.7% | 안정적이나 TextVQA 낮음 |
-| Exp4: Head Masking KL | KL-based GDPO | — | TBD | TBD | TBD | 진행 중 |
-| Exp5: Learned Imp + KL | Soft mask GDPO | — | TBD | TBD | TBD | 대기 중 |
-| Exp6: Learned Imp + LSR | Imp-weighted LSR | — | TBD | TBD | TBD | 대기 중 |
+| Exp4: Head Masking KL | KL-based GDPO | 15 | 90.0% | 38.0pp | 72.7% | **No improvement** — KL too weak |
+| Exp5: Learned Imp + KL | Soft mask GDPO | — | 90.0% | 38.0pp | 72.7% | **FAILED** — soft KL≈0, all steps skip |
+| Exp6: Learned Imp + LSR | Imp-weighted LSR | 5 | 91.7% | 40.0pp | 72.7% | Matches baseline; imp frozen (detach bug) |
 
 ### 3.2 Phase별 핵심 비교
 
@@ -643,22 +643,52 @@ Decision head (L2-5)와 Feature head (L23+)에 다른 learning rate 적용:
 
 ## 부록 B: Exp4/5/6 결과 (진행 중)
 
-### Exp4: Head Masking KL — 결과
+### Exp4: Head Masking KL — 결과 (COMPLETE)
 
-| Step | POPE | Gap | TextVQA | headKL | Notes |
-|------|------|-----|---------|--------|-------|
+| Step | POPE | Gap | TextVQA | headKL range | Notes |
+|------|------|-----|---------|-------------|-------|
 | Pre | 90.0% | 38.0pp | 72.7% | — | Pre-eval |
-| 5 | — | — | — | — | 진행 중 |
-| 10 | — | — | — | — | 진행 중 |
-| 15 | — | — | — | — | 진행 중 |
+| 5 | 90.0% | 38.0pp | 70.7% | 0.024-0.048 | No change |
+| 10 | 90.0% | 38.0pp | 70.7% | 0.050-0.087 | No change |
+| 15 | 90.0% | 38.0pp | 72.7% | 0.035-0.088 | No improvement |
 
-### Exp5: Learned Head Importance + KL — 대기 중
+**결론**: Head Masking KL은 개선을 가져오지 못함. KL 값 범위 (0.02-0.09)가 너무 작아
+GDPO 정규화에도 불구하고 효과적인 gradient signal을 제공하지 못함.
+Head-LSR의 activation delta (5-12)와 비교하면 2자릿수 작은 신호.
 
-_Exp4 완료 후 실행 예정_
+### Exp5: Learned Head Importance + KL — FAILED
 
-### Exp6: Learned Head Importance + Gated Head-LSR — 대기 중
+| Step | POPE | Gap | TextVQA | Notes |
+|------|------|-----|---------|-------|
+| Pre | 90.0% | 38.0pp | 72.7% | — |
+| 1-15 | — | — | — | ALL steps SKIP (r=0.000) |
+| Final | 0.0% | 0.0pp | 0.0% | Model collapsed |
 
-_Exp5 완료 후 실행 예정_
+**원인**: Soft masking (sigmoid(importance) × act)이 모든 448개 head에 적용되면
+개별 head의 마스킹 효과가 너무 작아 KL divergence ≈ 0. Binary masking (Exp4)에서
+headKL=0.02-0.09이던 것이 soft masking에서는 ~0으로 떨어짐.
+최종 eval 0.0%는 hooks가 masked 모드로 남아 있었거나 model collapse 발생.
+
+**교훈**: KL 기반 접근은 head 수가 많을수록 개별 효과가 희석됨. Activation delta 기반 (LSR)이
+근본적으로 더 강한 신호를 제공.
+
+### Exp6: Learned Head Importance + Gated Head-LSR — COMPLETE (No improvement)
+
+| Step | POPE | Gap | TextVQA | imp_mean | Notes |
+|------|------|-----|---------|----------|-------|
+| Pre | 90.0% | 38.0pp | 72.7% | 0.086 | — |
+| 5 | **91.7%** | **40.0pp** | **72.7%** | 0.086 | Matches baseline |
+| 10 | 90.0% | 38.0pp | 70.7% | 0.086 | Degradation starts |
+| 15 | 90.0% | 38.0pp | 70.7% | 0.086 | No improvement |
+
+**원인**: `compute_importance_weighted_lsr()`에서 `imp_sigmoid = torch.sigmoid(head_importance).detach()`로
+importance gradient가 차단됨. head_importance가 학습되지 않아 Cohen's d 초기화 그대로 유지.
+
+**learnedLSR 신호는 강했음** (3.6-6.6, Exp4 headKL의 268x): Gating과 GDPO가 정상 작동했으나,
+importance가 고정되어 Exp1 (12 heads, 균등 가중)과 사실상 동일한 448 head 버전이 됨.
+448 head 균등 가중은 12 head 선택적 가중보다 신호가 약해 개선 없음.
+
+**수정 방향**: detach 제거하고 importance를 통해 gradient 흐르도록 수정 필요.
 
 ---
 

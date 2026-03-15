@@ -1067,7 +1067,8 @@ def run_training(cfg, train_data, eval_data, model_path=None,
             num_layers=28, num_heads=16,
             calibration_file=cfg.get("calibration_file"),
             temperature=cfg.get("importance_temp", 2.0))
-        head_importance = head_importance.to(device)
+        # Move to device without breaking leaf status
+        head_importance.data = head_importance.data.to(device)
 
     # Install hooks
     is_exp6 = cfg.get("exp_type") == "exp6"
@@ -1088,16 +1089,23 @@ def run_training(cfg, train_data, eval_data, model_path=None,
               f"masking={'soft' if head_importance is not None else 'binary'}")
 
     # Optimizer: model params + optional head_importance
-    param_groups = [
-        {"params": [p for p in model.parameters() if p.requires_grad],
-         "lr": cfg["lr"]},
-    ]
+    model_params = [p for p in model.parameters() if p.requires_grad and p.is_leaf]
+    non_leaf = [p for p in model.parameters() if p.requires_grad and not p.is_leaf]
+    if non_leaf:
+        print(f"[optimizer] WARNING: {len(non_leaf)} non-leaf params excluded from optimizer")
+
     if head_importance is not None:
-        param_groups.append({
-            "params": [head_importance],
-            "lr": cfg.get("importance_lr", 1e-3),
-        })
-    optimizer = torch.optim.AdamW(param_groups, weight_decay=0.01)
+        print(f"[optimizer] head_importance: is_leaf={head_importance.is_leaf}, "
+              f"requires_grad={head_importance.requires_grad}, "
+              f"device={head_importance.device}, grad_fn={head_importance.grad_fn}")
+        # Use separate optimizers to avoid param group issues
+        optimizer = torch.optim.AdamW(model_params, lr=cfg["lr"], weight_decay=0.01)
+        imp_optimizer = torch.optim.AdamW([head_importance],
+                                           lr=cfg.get("importance_lr", 1e-3),
+                                           weight_decay=0.0)
+    else:
+        optimizer = torch.optim.AdamW(model_params, lr=cfg["lr"], weight_decay=0.01)
+        imp_optimizer = None
 
     # Pre-eval
     print("Pre-training eval...")
@@ -1117,6 +1125,8 @@ def run_training(cfg, train_data, eval_data, model_path=None,
 
     model.train()
     optimizer.zero_grad()
+    if imp_optimizer is not None:
+        imp_optimizer.zero_grad()
     best_pope = pre_pope["acc"]
 
     for step in range(cfg["num_steps"]):
@@ -1218,8 +1228,13 @@ def run_training(cfg, train_data, eval_data, model_path=None,
                     torch.nn.utils.clip_grad_norm_([head_importance], 1.0)
                 optimizer.step()
                 optimizer.zero_grad()
+                if imp_optimizer is not None:
+                    imp_optimizer.step()
+                    imp_optimizer.zero_grad()
         except torch.cuda.OutOfMemoryError:
             optimizer.zero_grad()
+            if imp_optimizer is not None:
+                imp_optimizer.zero_grad()
             torch.cuda.empty_cache(); gc.collect()
             print(f"  [step {step+1}] OOM loss, skip"); continue
 
