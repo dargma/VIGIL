@@ -1,0 +1,15 @@
+exp	method	steps	pope	gap	textvqa	notes	timestamp
+baseline	HF_Thinking	0	91.7	40.0	72.7	Qwen3-VL-2B-Thinking baseline	2026-03-12
+phase2_r4_best	GRPO-LSR	10	95.0	44.0	-	Phase 2 Round 4 best	2026-03-12
+phase4_gdpo_nolsr	GDPO	50	93.3	42.0	-	No LSR, 19/50 gradient updates	2026-03-13
+phase6_gated_s5	Gated_HeadLSR	5	95.0	44.0	70.7	Exp1 step 5	2026-03-15
+phase6_gated_s10	Gated_HeadLSR	10	95.0	44.0	74.7	Exp1 step 10 BEST TextVQA	2026-03-15
+phase6_gated_s15	Gated_HeadLSR	15	93.3	42.0	70.7	Exp1 step 15 (degrades)	2026-03-15
+phase6_curric_s10	Curriculum	10	95.0	44.0	72.7	Exp2 step 10	2026-03-15
+phase6_curric_s15	Curriculum	15	95.0	44.0	72.7	Exp2 step 15	2026-03-15
+phase6_curric_s20	Curriculum	20	91.7	40.0	70.7	Exp2 step 20 (dip)	2026-03-15
+phase6_curric_s25	Curriculum	25	95.0	44.0	70.7	Exp2 step 25 (recovers)	2026-03-15
+phase6_curric_s30	Curriculum	30	90.0	38.0	70.7	Exp2 step 30 (crashed)	2026-03-15
+phase6_combo_s10	Gated+Curriculum	10	95.0	44.0	70.7	Exp3 step 10	2026-03-15
+phase6_combo_s25	Gated+Curriculum	25	95.0	44.0	70.7	Exp3 step 25	2026-03-15
+alpha0_ablation	GDPO_alpha0	10	93.3	42.0	70.7	Alpha=0.0 proves GDPO drives gain	2026-03-14

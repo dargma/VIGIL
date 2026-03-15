@@ -1,0 +1,87 @@
+{
+  "label": "baseline",
+  "report": {
+    "OCR": {
+      "score": 10,
+      "max_score": 14,
+      "acc_plus": 85.7
+    },
+    "artwork": {
+      "score": 7,
+      "max_score": 14,
+      "acc_plus": 75.0
+    },
+    "celebrity": {
+      "score": 7,
+      "max_score": 14,
+      "acc_plus": 75.0
+    },
+    "code_reasoning": {
+      "score": 14,
+      "max_score": 14,
+      "acc_plus": 100.0
+    },
+    "color": {
+      "score": 13,
+      "max_score": 14,
+      "acc_plus": 96.4
+    },
+    "commonsense_reasoning": {
+      "score": 9,
+      "max_score": 14,
+      "acc_plus": 82.1
+    },
+    "count": {
+      "score": 13,
+      "max_score": 14,
+      "acc_plus": 92.9
+    },
+    "existence": {
+      "score": 14,
+      "max_score": 14,
+      "acc_plus": 100.0
+    },
+    "landmark": {
+      "score": 6,
+      "max_score": 14,
+      "acc_plus": 71.4
+    },
+    "numerical_calculation": {
+      "score": 14,
+      "max_score": 14,
+      "acc_plus": 100.0
+    },
+    "position": {
+      "score": 9,
+      "max_score": 14,
+      "acc_plus": 82.1
+    },
+    "posters": {
+      "score": 10,
+      "max_score": 14,
+      "acc_plus": 85.7
+    },
+    "scene": {
+      "score": 7,
+      "max_score": 14,
+      "acc_plus": 75.0
+    },
+    "text_translation": {
+      "score": 12,
+      "max_score": 14,
+      "acc_plus": 92.9
+    },
+    "_Perception": {
+      "score": 96,
+      "max_score": 140
+    },
+    "_Cognition": {
+      "score": 49,
+      "max_score": 56
+    },
+    "_Total": {
+      "score": 145,
+      "max_score": 196
+    }
+  }
+}

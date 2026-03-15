@@ -264,7 +264,7 @@ def run_mme_eval(model, processor, pairs, label):
 
         results[qid] = pair_results
 
-        if (pi + 1) % 100 == 0 or (pi + 1) == len(pairs):
+        if (pi + 1) % 50 == 0 or (pi + 1) == len(pairs):
             elapsed = time.time() - t0
             rate = (pi + 1) / elapsed * 60 if elapsed > 0 else 0
             acc = correct_q / total_q * 100 if total_q > 0 else 0
@@ -304,13 +304,30 @@ def print_mme_report(report, label=""):
     print(f"{'='*70}")
 
 
-def run_experiment_B():
+def run_experiment_B(max_images=200):
     """MME eval: baseline vs Phase 2 R4 best."""
     print("\n" + "=" * 70)
-    print("  EXPERIMENT B: MME Evaluation")
+    print(f"  EXPERIMENT B: MME Evaluation (max {max_images} images)")
     print("=" * 70)
 
     pairs = load_mme_data()
+    # Sample proportionally from each subtask
+    if max_images and len(pairs) > max_images:
+        import random
+        random.seed(42)
+        by_cat = defaultdict(list)
+        for p in pairs:
+            by_cat[p[0]["category"]].append(p)
+        sampled = []
+        per_cat = max(2, max_images // len(by_cat))
+        for cat in sorted(by_cat):
+            items = by_cat[cat]
+            n = min(len(items), per_cat)
+            sampled.extend(random.sample(items, n))
+        pairs = sampled[:max_images]
+        n_q = sum(len(p) for p in pairs)
+        cats = set(p[0]["category"] for p in pairs)
+        print(f"[mme] Sampled {len(pairs)} images ({n_q} questions), {len(cats)} subtasks")
     out_dir = Path("lab/reports/mme")
     out_dir.mkdir(parents=True, exist_ok=True)
     ts = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -556,6 +573,8 @@ def main():
     parser.add_argument("--exp", type=str, required=True,
                         choices=["A", "B", "C", "all"],
                         help="Which experiment to run")
+    parser.add_argument("--max-images", type=int, default=200,
+                        help="Max images for MME eval (default: 200)")
     args = parser.parse_args()
 
     t0 = time.time()
@@ -564,7 +583,7 @@ def main():
         run_experiment_A()
 
     if args.exp in ("B", "all"):
-        run_experiment_B()
+        run_experiment_B(max_images=args.max_images)
 
     if args.exp in ("C", "all"):
         run_experiment_C()
