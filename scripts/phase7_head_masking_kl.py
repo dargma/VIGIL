@@ -21,6 +21,14 @@ Exp6: Learned Head Importance + Gated Head-LSR
   - head_importance is optimized by GRPO gradient alongside model weights
   - Gated: uses correctness-only when R_correct has variance, else importance-weighted LSR
 
+Exp7: Dynamic Head Selection + Gated Head-LSR
+  - Instead of fixed top-K calibrated heads, dynamically select heads per input
+  - Forward pass with output_attentions=True → extract attention from generated→image tokens
+  - Select top-K heads with highest vision attention per sample
+  - Compute LSR delta (real vs black image) using only those dynamically selected heads
+  - Gated GDPO: correctness-only when R_correct has variance, else dynamic-LSR
+  - ~10% overhead (one extra forward pass for head selection)
+
 Usage:
     # Exp4: Head Masking KL
     PYTHONUNBUFFERED=1 python -u scripts/phase7_head_masking_kl.py \
@@ -36,6 +44,11 @@ Usage:
     PYTHONUNBUFFERED=1 python -u scripts/phase7_head_masking_kl.py \
         --exp 6 --steps 15 --gdpo --importance-lr 1e-3 --importance-temp 2.0 \
         2>&1 | tee logs/phase7_exp6_learned_lsr.log
+
+    # Exp7: Dynamic Head Selection + Gated Head-LSR
+    PYTHONUNBUFFERED=1 python -u scripts/phase7_head_masking_kl.py \
+        --exp 7 --steps 30 --train-samples 1000 --dynamic-heads \
+        2>&1 | tee logs/phase7_exp7_dynamic.log
 """
 
 import os, sys, gc, json, re, time, random, argparse, string
@@ -493,10 +506,10 @@ def compute_importance_weighted_lsr(model, processor, sample, candidate_ids,
         model(**black_inputs)
     black_acts = hooks_lsr.get_per_token_head_acts(bpl, n_cand)
 
-    # Importance-weighted delta scores
-    imp_sigmoid = torch.sigmoid(head_importance).detach()  # [28, 16]
+    # Importance-weighted delta scores (NO detach — gradients flow to head_importance)
+    imp_sigmoid = torch.sigmoid(head_importance)  # [28, 16], differentiable
     scores = torch.zeros(n_cand, device=device)
-    total_weight = 0.0
+    total_weight = torch.zeros(1, device=device)
 
     for (l, h) in real_acts:
         if (l, h) not in black_acts:
@@ -508,20 +521,406 @@ def compute_importance_weighted_lsr(model, processor, sample, candidate_ids,
             continue
 
         diff = (ra[:min_len] - ba[:min_len]).float()
-        head_delta = diff.norm(dim=-1)  # (min_len,)
+        head_delta = diff.norm(dim=-1).detach()  # (min_len,) detach activations, not importance
 
-        w = imp_sigmoid[l, h].item()
-        scores[:min_len] += head_delta[:min_len] * w
-        total_weight += w
+        w = imp_sigmoid[l, h]  # scalar tensor, keeps grad
+        scores[:min_len] = scores[:min_len] + head_delta[:min_len] * w
+        total_weight = total_weight + w
 
-    if total_weight > 0:
-        scores /= total_weight
+    if total_weight.item() > 0:
+        scores = scores / total_weight
 
     mean_score = scores.mean().item()
 
     del real_inputs, black_inputs, real_acts, black_acts
     hooks_lsr.clear()
     return scores, mean_score, n_cand
+
+
+# ══════════════════════════════════════════════════════════════════════
+#  EXP7: DYNAMIC HEAD SELECTION + GATED HEAD-LSR
+# ══════════════════════════════════════════════════════════════════════
+
+class DynamicVisionHeadHooks:
+    """Hook manager for Exp7: captures activations at ALL layers for
+    dynamic per-sample head selection via attention scores.
+
+    Unlike VisionHeadHooksLSR (Exp6), this does NOT use learned importance.
+    Instead, heads are selected per-input based on attention to image tokens.
+    """
+
+    def __init__(self, model, num_layers=28, num_heads=16, head_dim=128):
+        self.num_layers = num_layers
+        self.num_heads = num_heads
+        self.head_dim = head_dim
+        self._captured = {}
+        self._hooks = []
+
+        layers = model.model.language_model.layers
+        actual_layers = min(num_layers, len(layers))
+
+        for li in range(actual_layers):
+            o_proj = layers[li].self_attn.o_proj
+
+            def make_hook(layer_idx):
+                def hook_fn(module, args):
+                    self._captured[layer_idx] = args[0].detach()
+                return hook_fn
+
+            handle = o_proj.register_forward_pre_hook(make_hook(li))
+            self._hooks.append(handle)
+
+    def get_per_token_head_acts(self, prompt_len, seq_len, selected_heads):
+        """Extract per-token activations for dynamically selected heads.
+
+        Args:
+            prompt_len: number of prompt tokens
+            seq_len: number of generated tokens to extract
+            selected_heads: list of (layer_idx, head_idx) tuples
+
+        Returns: dict of (layer, head) -> (seq_len, head_dim)
+        """
+        result = {}
+        for l, h in selected_heads:
+            inp = self._captured.get(l)
+            if inp is None:
+                continue
+            reshaped = inp[0].view(-1, self.num_heads, self.head_dim)
+            act = reshaped[prompt_len:prompt_len + seq_len, h, :]
+            result[(l, h)] = act
+        return result
+
+    def clear(self):
+        self._captured.clear()
+
+    def remove(self):
+        for h in self._hooks:
+            h.remove()
+        self._hooks.clear()
+        self._captured.clear()
+
+
+def detect_image_token_range(input_ids, tokenizer):
+    """Detect the range of image/vision tokens in the input sequence.
+
+    Qwen3-VL uses special tokens <|vision_start|> and <|vision_end|> to
+    bracket image tokens. We find these markers to identify the image
+    token region.
+
+    Returns: (start_idx, end_idx) or (0, 0) if not found.
+    """
+    ids = input_ids[0].tolist() if input_ids.dim() > 1 else input_ids.tolist()
+
+    # Try to find vision_start/vision_end token IDs
+    vision_start_id = None
+    vision_end_id = None
+
+    # Check for known Qwen3-VL special token names
+    for name in ["<|vision_start|>", "<|image_pad|>"]:
+        tid = tokenizer.convert_tokens_to_ids(name)
+        if tid is not None and tid != tokenizer.unk_token_id:
+            if name == "<|vision_start|>":
+                vision_start_id = tid
+            break
+
+    for name in ["<|vision_end|>"]:
+        tid = tokenizer.convert_tokens_to_ids(name)
+        if tid is not None and tid != tokenizer.unk_token_id:
+            vision_end_id = tid
+            break
+
+    if vision_start_id is not None and vision_end_id is not None:
+        start = None
+        end = None
+        for i, tok in enumerate(ids):
+            if tok == vision_start_id and start is None:
+                start = i + 1  # Token after the start marker
+            if tok == vision_end_id and start is not None:
+                end = i
+                break
+        if start is not None and end is not None and end > start:
+            return start, end
+
+    # Fallback: look for <|image_pad|> tokens (Qwen3-VL image placeholder)
+    image_pad_id = tokenizer.convert_tokens_to_ids("<|image_pad|>")
+    if image_pad_id is not None and image_pad_id != tokenizer.unk_token_id:
+        first = None
+        last = None
+        for i, tok in enumerate(ids):
+            if tok == image_pad_id:
+                if first is None:
+                    first = i
+                last = i + 1
+        if first is not None and last is not None:
+            return first, last
+
+    # Last resort: assume image tokens are in first 30% of sequence
+    total = len(ids)
+    return 0, max(1, total // 3)
+
+
+def select_dynamic_heads(model, inputs, prompt_len, tokenizer,
+                         top_k=12, num_kv_heads=8, num_q_heads=16):
+    """Dynamically select vision-relevant Q heads based on attention scores.
+
+    For each KV head, compute mean attention from generated tokens to image
+    tokens. Map KV head scores to Q heads (GQA: 2 Q heads per KV head).
+    Return top-K Q heads sorted by vision attention score.
+
+    Args:
+        model: the VLM
+        inputs: preprocessed inputs dict
+        prompt_len: number of prompt tokens
+        tokenizer: for detecting image token positions
+        top_k: number of Q heads to select
+        num_kv_heads: number of KV heads per layer (8 for Qwen3-VL-2B)
+        num_q_heads: number of Q heads per layer (16 for Qwen3-VL-2B)
+
+    Returns:
+        selected_heads: list of (layer_idx, q_head_idx) tuples
+        head_scores_dict: dict of (layer, q_head) -> attention_score
+    """
+    # Detect image token range
+    img_start, img_end = detect_image_token_range(
+        inputs["input_ids"], tokenizer)
+    n_img_tokens = img_end - img_start
+
+    if n_img_tokens <= 0:
+        # Fallback to calibrated heads
+        return [(l, h) for l, h, _ in DEFAULT_VISION_HEADS[:top_k]], {}
+
+    # Forward pass with attention outputs
+    with torch.no_grad():
+        out = model(**inputs, output_attentions=True)
+
+    # out.attentions is a tuple: one tensor per layer
+    # Each tensor shape: [batch, num_kv_heads, seq_len, seq_len]
+    head_scores = []
+    head_scores_dict = {}
+    q_per_kv = num_q_heads // num_kv_heads  # 2 for Qwen3-VL-2B
+
+    for layer_idx, attn in enumerate(out.attentions):
+        if attn is None:
+            continue
+        # attn shape: [batch, num_kv_heads, seq_len, seq_len]
+        seq_len = attn.shape[-1]
+
+        # Attention from generated token positions to image token positions
+        # Use the last few prompt tokens as "generated" proxy since we're
+        # doing this at prompt stage (before actual generation)
+        # Use all positions after image region as query positions
+        query_start = max(img_end, 1)
+        if query_start >= seq_len:
+            query_start = max(seq_len - 10, 0)
+
+        # gen_to_img: [batch, num_kv_heads, query_positions, img_tokens]
+        safe_img_end = min(img_end, seq_len)
+        safe_img_start = min(img_start, safe_img_end)
+        gen_to_img = attn[0, :, query_start:, safe_img_start:safe_img_end]
+
+        if gen_to_img.numel() == 0:
+            continue
+
+        # Per KV-head: mean attention to image tokens
+        per_kv_score = gen_to_img.float().mean(dim=(-2, -1))  # [num_kv_heads]
+
+        for kv_idx in range(min(per_kv_score.shape[0], num_kv_heads)):
+            score = per_kv_score[kv_idx].item()
+            # Map KV head to Q heads (GQA grouping)
+            for q_offset in range(q_per_kv):
+                q_idx = kv_idx * q_per_kv + q_offset
+                if q_idx < num_q_heads:
+                    head_scores.append((layer_idx, q_idx, score))
+                    head_scores_dict[(layer_idx, q_idx)] = score
+
+    # Clean up attention tensors
+    del out
+
+    if not head_scores:
+        return [(l, h) for l, h, _ in DEFAULT_VISION_HEADS[:top_k]], {}
+
+    # Sort by score descending, select top-K
+    head_scores.sort(key=lambda x: x[2], reverse=True)
+    selected = [(l, h) for l, h, _ in head_scores[:top_k]]
+
+    return selected, head_scores_dict
+
+
+def compute_dynamic_head_lsr(model, processor, sample, candidate_ids,
+                              device, hooks, selected_heads, lsr_scale=10.0):
+    """Compute per-token vision score using dynamically selected heads.
+
+    Same as Phase 6 Head-LSR but uses dynamically selected heads per sample
+    instead of fixed calibrated heads.
+
+    Args:
+        selected_heads: list of (layer_idx, q_head_idx) from select_dynamic_heads
+
+    Returns: head_scores (tensor), mean_score (float), n_tokens (int)
+    """
+    if candidate_ids.numel() == 0:
+        return torch.zeros(0, device=device), 0.0, 0
+
+    image = sample["image"]
+    question = sample["question"]
+    n_cand = candidate_ids.numel()
+
+    # Forward with real image (teacher-forced)
+    real_inputs = prepare_inputs(processor, image, question, device)
+    rpl = real_inputs["input_ids"].shape[1]
+    rf = torch.cat([real_inputs["input_ids"], candidate_ids.unsqueeze(0)], dim=1)
+    real_inputs["input_ids"] = rf
+    real_inputs["attention_mask"] = torch.ones_like(rf)
+    hooks.clear()
+    with torch.no_grad():
+        model(**real_inputs)
+    real_acts = hooks.get_per_token_head_acts(rpl, n_cand, selected_heads)
+
+    # Forward with black image (teacher-forced)
+    black_image = Image.new('RGB', image.size, (0, 0, 0))
+    black_inputs = prepare_inputs(processor, black_image, question, device)
+    bpl = black_inputs["input_ids"].shape[1]
+    bf = torch.cat([black_inputs["input_ids"], candidate_ids.unsqueeze(0)], dim=1)
+    black_inputs["input_ids"] = bf
+    black_inputs["attention_mask"] = torch.ones_like(bf)
+    hooks.clear()
+    with torch.no_grad():
+        model(**black_inputs)
+    black_acts = hooks.get_per_token_head_acts(bpl, n_cand, selected_heads)
+
+    # Compute per-token vision score = mean head activation L2 difference
+    scores = torch.zeros(n_cand, device=device)
+    n_heads_found = 0
+
+    for (l, h) in real_acts:
+        if (l, h) not in black_acts:
+            continue
+        ra = real_acts[(l, h)]  # (n_cand, head_dim)
+        ba = black_acts[(l, h)]  # (n_cand, head_dim)
+
+        min_len = min(ra.shape[0], ba.shape[0], n_cand)
+        if min_len == 0:
+            continue
+
+        diff = (ra[:min_len] - ba[:min_len]).float()
+        head_delta = diff.norm(dim=-1)  # (min_len,)
+
+        scores[:min_len] += head_delta[:min_len]
+        n_heads_found += 1
+
+    if n_heads_found > 0:
+        scores /= n_heads_found
+
+    mean_score = scores.mean().item()
+
+    del real_inputs, black_inputs, real_acts, black_acts
+    hooks.clear()
+    return scores, mean_score, n_cand
+
+
+def compute_rewards_dynamic_lsr(model, processor, sample, candidates,
+                                 cand_ids_list, prompt_len, inputs,
+                                 device, cfg, hooks_dynamic, tokenizer):
+    """Compute R_correct + R_dynamic_lsr (Gated GDPO) for each candidate.
+
+    Exp7: Dynamic head selection per sample, then Gated LSR.
+
+    Steps:
+    1. Run forward pass with output_attentions to select top-K vision heads
+    2. Compute real-vs-black activation delta using selected heads
+    3. Gated: correctness-only when R_correct has variance, else dynamic-LSR
+    """
+    r_correct_list, r_lsr_list = [], []
+    token_weights_list = []
+    details = []
+    gt = sample["answer"]
+    qtype = sample.get("type", "short_answer")
+    answers_all = sample.get("answers_all")
+
+    # Step 1: Dynamic head selection (once per sample, shared across candidates)
+    top_k = cfg.get("top_k_heads", 12)
+    try:
+        selected_heads, attn_scores = select_dynamic_heads(
+            model, inputs, prompt_len, tokenizer,
+            top_k=top_k,
+            num_kv_heads=cfg.get("num_kv_heads", 8),
+            num_q_heads=cfg.get("num_q_heads", 16))
+    except Exception as e:
+        print(f"    [dynamic] Head selection failed: {e}, using calibrated")
+        selected_heads = [(l, h) for l, h, _ in DEFAULT_VISION_HEADS[:top_k]]
+        attn_scores = {}
+
+    # Log which heads were selected
+    unique_layers = sorted(set(l for l, h in selected_heads))
+
+    # Step 2: Compute rewards for each candidate
+    for cand, cand_ids in zip(candidates, cand_ids_list):
+        pred = extract_answer(cand, qtype)
+        r_correct = compute_r_correct(pred, gt, qtype, answers_all=answers_all)
+
+        try:
+            head_scores, mean_score, n_tokens = compute_dynamic_head_lsr(
+                model, processor, sample, cand_ids, device,
+                hooks_dynamic, selected_heads,
+                lsr_scale=cfg.get("lsr_scale", 10.0))
+        except Exception:
+            head_scores = torch.zeros(0, device=device)
+            mean_score, n_tokens = 0.0, 0
+
+        r_lsr = min(mean_score / cfg.get("lsr_scale", 10.0), 1.0)
+        r_correct_list.append(r_correct)
+        r_lsr_list.append(r_lsr)
+
+        # Per-token weights from head scores
+        n_tok = cand_ids.numel()
+        if head_scores.numel() >= 5:
+            ns = head_scores / (head_scores.mean() + 1e-6)
+            ns = torch.clamp(ns, 0.0, 5.0)
+            w_len = min(ns.numel(), n_tok)
+            alpha = cfg.get("alpha", 0.5)
+            if w_len < n_tok:
+                token_w = torch.cat([1.0 + alpha * ns[:w_len],
+                                     torch.ones(n_tok - w_len, device=device)])
+            else:
+                token_w = 1.0 + alpha * ns[:n_tok]
+        else:
+            token_w = torch.ones(n_tok, device=device)
+        token_weights_list.append(token_w)
+
+    # Step 3: Gated GDPO normalization
+    correct_has_variance = np.std(r_correct_list) > 1e-6
+
+    if correct_has_variance:
+        w_correct, w_lsr = 1.0, 0.0
+        gate_mode = "correctness"
+    else:
+        w_correct, w_lsr = 0.0, 1.0
+        gate_mode = "dynamic_lsr"
+
+    if len(r_correct_list) > 1:
+        norm_correct = gdpo_normalize(r_correct_list)
+        norm_lsr = gdpo_normalize(r_lsr_list)
+        combined = w_correct * norm_correct + w_lsr * norm_lsr
+        rewards = combined.tolist()
+    else:
+        rewards = [r_correct_list[0]]
+
+    # When gated to correctness, disable token weighting
+    if correct_has_variance:
+        token_weights_list = [torch.ones(c.numel(), device=device)
+                              for c in cand_ids_list]
+
+    for i in range(len(candidates)):
+        details.append({
+            "correct": r_correct_list[i],
+            "dynamic_lsr": r_lsr_list[i] * cfg.get("lsr_scale", 10.0),
+            "gate_mode": gate_mode,
+            "token_weight_mean": token_weights_list[i].mean().item(),
+            "dynamic_heads_layers": unique_layers,
+            "n_dynamic_heads": len(selected_heads),
+        })
+
+    return rewards, details, token_weights_list
 
 
 def compute_rewards_learned_lsr(model, processor, sample, candidates,
@@ -556,14 +955,21 @@ def compute_rewards_learned_lsr(model, processor, sample, candidates,
         r_correct_list.append(r_correct)
         r_lsr_list.append(r_lsr)
 
-        # Per-token weights from head scores
+        # Per-token weights from head scores (preserve grad through importance)
         n_tok = cand_ids.numel()
-        token_w = torch.ones(n_tok, device=device)
         if head_scores.numel() >= 5:
-            ns = head_scores / (head_scores.mean() + 1e-6)
+            ns = head_scores / (head_scores.mean().detach() + 1e-6)
             ns = torch.clamp(ns, 0.0, 5.0)
             w_len = min(ns.numel(), n_tok)
-            token_w[:w_len] = 1.0 + cfg.get("alpha", 0.5) * ns[:w_len]
+            # Build token_w without in-place ops to preserve autograd
+            alpha = cfg.get("alpha", 0.5)
+            if w_len < n_tok:
+                token_w = torch.cat([1.0 + alpha * ns[:w_len],
+                                     torch.ones(n_tok - w_len, device=device)])
+            else:
+                token_w = 1.0 + alpha * ns[:n_tok]
+        else:
+            token_w = torch.ones(n_tok, device=device)
         token_weights_list.append(token_w)
 
     # Gated GDPO normalization
@@ -978,8 +1384,14 @@ def generate_report(history, report_dir):
 
     # Summary markdown
     cfg = history.get("config", {})
-    exp_type = "Exp4 (Head Masking KL)" if not cfg.get("learned_importance") \
-        else "Exp5 (Learned Head Importance + KL)"
+    if cfg.get("exp_type") == "exp7":
+        exp_type = "Exp7 (Dynamic Head Selection + Gated LSR)"
+    elif cfg.get("exp_type") == "exp6":
+        exp_type = "Exp6 (Learned Head Importance + Gated LSR)"
+    elif cfg.get("learned_importance"):
+        exp_type = "Exp5 (Learned Head Importance + KL)"
+    else:
+        exp_type = "Exp4 (Head Masking KL)"
 
     lines = [f"# Phase 7: {exp_type}", ""]
     lines.append(f"- Steps: {cfg.get('num_steps', '?')}")
@@ -1049,12 +1461,22 @@ def run_training(cfg, train_data, eval_data, model_path=None,
     print(f"  Phase 7: Head Masking KL GRPO — {exp_type.upper()}")
     print(f"  steps={cfg['num_steps']} | group={cfg['group_size']} | "
           f"T={cfg['temperature']} | lr={cfg['lr']}")
-    print(f"  GDPO weights: correct={cfg.get('gdpo_w_correct', 0.6)}, "
-          f"kl={cfg.get('gdpo_w_kl', 0.4)}")
+    if exp_type == "exp7":
+        print(f"  Dynamic head selection: top-{cfg.get('top_k_heads', 12)} "
+              f"per sample (GQA: {cfg.get('num_q_heads', 16)}Q/{cfg.get('num_kv_heads', 8)}KV)")
+        print(f"  Gated GDPO: correctness when variance, else dynamic-LSR")
+        print(f"  alpha={cfg.get('alpha', 0.5)} | lsr_scale={cfg.get('lsr_scale', 10.0)}")
+    else:
+        print(f"  GDPO weights: correct={cfg.get('gdpo_w_correct', 0.6)}, "
+              f"kl={cfg.get('gdpo_w_kl', 0.4)}")
     if cfg.get("learned_importance"):
         print(f"  Learned importance: lr={cfg['importance_lr']}, "
               f"temp={cfg['importance_temp']}")
-    print(f"  Vision heads: {len(cfg['vision_heads'])} heads")
+    if not cfg.get("dynamic_heads"):
+        print(f"  Vision heads: {len(cfg['vision_heads'])} heads (fixed calibrated)")
+    else:
+        print(f"  Vision heads: dynamic per-sample selection "
+              f"(fallback: {len(cfg['vision_heads'])} calibrated)")
     print(f"{'='*70}\n")
 
     model, processor, tokenizer = load_model(model_path, for_training=True)
@@ -1072,10 +1494,18 @@ def run_training(cfg, train_data, eval_data, model_path=None,
 
     # Install hooks
     is_exp6 = cfg.get("exp_type") == "exp6"
+    is_exp7 = cfg.get("exp_type") == "exp7"
     hooks = None
     hooks_lsr = None
+    hooks_dynamic = None
 
-    if is_exp6:
+    if is_exp7:
+        # Exp7: Dynamic hooks on ALL layers for per-sample head selection
+        hooks_dynamic = DynamicVisionHeadHooks(
+            model, num_layers=28, num_heads=16, head_dim=128)
+        print(f"[hooks] Exp7 dynamic hooks on all 28 layers")
+        print(f"[hooks] Heads selected dynamically per sample (top-{cfg.get('top_k_heads', 12)})")
+    elif is_exp6:
         # Exp6: LSR hooks on all layers for importance-weighted delta
         hooks_lsr = VisionHeadHooksLSR(model, head_importance,
                                         num_heads=16, head_dim=128)
@@ -1147,11 +1577,15 @@ def run_training(cfg, train_data, eval_data, model_path=None,
             torch.cuda.empty_cache(); gc.collect()
             print(f"  [step {step+1}] OOM gen, skip"); continue
 
-        # Rewards computation (Exp4/5: KL, Exp6: learned LSR)
+        # Rewards computation (Exp4/5: KL, Exp6: learned LSR, Exp7: dynamic LSR)
         token_weights_list = None
         per_token_kl_list = None
         try:
-            if is_exp6:
+            if is_exp7:
+                rewards, details, token_weights_list = compute_rewards_dynamic_lsr(
+                    model, processor, sample, candidates, cand_ids_list,
+                    prompt_len, inputs, device, cfg, hooks_dynamic, tokenizer)
+            elif is_exp6:
                 rewards, details, token_weights_list = compute_rewards_learned_lsr(
                     model, processor, sample, candidates, cand_ids_list,
                     prompt_len, inputs, device, cfg, hooks_lsr, head_importance)
@@ -1180,7 +1614,11 @@ def run_training(cfg, train_data, eval_data, model_path=None,
                             cfg["temperature"], cfg["top_p"],
                             cfg["max_new_tokens"], cfg.get("min_think_tokens", 32),
                             device)
-                    if is_exp6:
+                    if is_exp7:
+                        rewards, details, token_weights_list = compute_rewards_dynamic_lsr(
+                            model, processor, alt_sample, candidates, cand_ids_list,
+                            prompt_len, inputs, device, cfg, hooks_dynamic, tokenizer)
+                    elif is_exp6:
                         rewards, details, token_weights_list = compute_rewards_learned_lsr(
                             model, processor, alt_sample, candidates, cand_ids_list,
                             prompt_len, inputs, device, cfg, hooks_lsr, head_importance)
@@ -1206,12 +1644,12 @@ def run_training(cfg, train_data, eval_data, model_path=None,
         # Advantages
         advantages = ((rarr - rarr.mean()) / (rstd + 1e-8)).tolist()
 
-        # GRPO loss (Exp6 uses token-weighted loss via compute_weighted_grpo_loss)
+        # GRPO loss (Exp6/7 use token-weighted loss via compute_weighted_grpo_loss)
         model.train()
         if hasattr(model, 'gradient_checkpointing_enable'):
             model.gradient_checkpointing_enable()
         try:
-            if is_exp6 and token_weights_list is not None:
+            if (is_exp6 or is_exp7) and token_weights_list is not None:
                 loss, lstats = compute_weighted_grpo_loss(
                     model, inputs, cand_ids_list, prompt_len,
                     advantages, token_weights_list, cfg)
@@ -1242,8 +1680,11 @@ def run_training(cfg, train_data, eval_data, model_path=None,
         mc = np.mean([d["correct"] for d in details])
         gate = details[0].get("gate_mode", "standard") if details else "standard"
 
-        # Exp6 logs LSR score, Exp4/5 logs KL
-        if is_exp6:
+        # Exp7 logs dynamic LSR, Exp6 logs learned LSR, Exp4/5 logs KL
+        if is_exp7:
+            metric_val = np.mean([d.get("dynamic_lsr", 0) for d in details])
+            metric_name = "dynLSR"
+        elif is_exp6:
             metric_val = np.mean([d.get("learned_lsr", 0) for d in details])
             metric_name = "learnedLSR"
         else:
@@ -1266,6 +1707,11 @@ def run_training(cfg, train_data, eval_data, model_path=None,
             step_info["importance_mean"] = imp_sig.mean().item()
             step_info["importance_max"] = imp_sig.max().item()
             step_info["importance_std"] = imp_sig.std().item()
+            # Log gradient info to verify fix
+            if head_importance.grad is not None:
+                step_info["importance_grad_norm"] = head_importance.grad.norm().item()
+            else:
+                step_info["importance_grad_norm"] = 0.0
 
             # Track evolution every 5 steps
             if (step + 1) % 5 == 0:
@@ -1287,7 +1733,8 @@ def run_training(cfg, train_data, eval_data, model_path=None,
 
         imp_str = ""
         if head_importance is not None:
-            imp_str = f" imp={step_info['importance_mean']:.3f}±{step_info['importance_std']:.3f}"
+            grad_norm = step_info.get('importance_grad_norm', 0.0)
+            imp_str = f" imp={step_info['importance_mean']:.3f}±{step_info['importance_std']:.3f} grad={grad_norm:.4f}"
 
         print(f"  [step {step+1}/{cfg['num_steps']}] "
               f"loss={loss.item():.4f} r={rarr.mean():.3f}±{rstd:.3f} "
@@ -1329,6 +1776,8 @@ def run_training(cfg, train_data, eval_data, model_path=None,
         hooks.remove()
     if hooks_lsr is not None:
         hooks_lsr.remove()
+    if hooks_dynamic is not None:
+        hooks_dynamic.remove()
 
     # Final save
     model.save_pretrained(output_dir / "final")
@@ -1376,9 +1825,9 @@ def run_training(cfg, train_data, eval_data, model_path=None,
 def main():
     parser = argparse.ArgumentParser(
         description="Phase 7: Head Masking KL + Learned Head Importance")
-    parser.add_argument("--exp", type=int, default=4, choices=[4, 5, 6],
+    parser.add_argument("--exp", type=int, default=4, choices=[4, 5, 6, 7],
                         help="Experiment: 4=Head Masking KL, 5=Learned Importance+KL, "
-                             "6=Learned Importance+Gated LSR")
+                             "6=Learned Importance+Gated LSR, 7=Dynamic Head Selection+Gated LSR")
     parser.add_argument("--model-path", type=str,
                         default="Qwen/Qwen3-VL-2B-Thinking")
     parser.add_argument("--output-dir", type=str, default=None,
@@ -1424,9 +1873,17 @@ def main():
 
     # Exp6: LSR-specific params
     parser.add_argument("--alpha", type=float, default=0.5,
-                        help="Head-level weight scale for token weighting (Exp6)")
+                        help="Head-level weight scale for token weighting (Exp6/7)")
     parser.add_argument("--lsr-scale", type=float, default=10.0,
-                        help="Head score normalization scale (Exp6)")
+                        help="Head score normalization scale (Exp6/7)")
+
+    # Exp7: Dynamic head selection
+    parser.add_argument("--dynamic-heads", action="store_true",
+                        help="Enable dynamic per-sample head selection (Exp7)")
+    parser.add_argument("--num-kv-heads", type=int, default=8,
+                        help="Number of KV heads per layer (GQA, default=8 for Qwen3-VL-2B)")
+    parser.add_argument("--num-q-heads", type=int, default=16,
+                        help="Number of Q heads per layer (GQA, default=16 for Qwen3-VL-2B)")
 
     args = parser.parse_args()
 
@@ -1438,11 +1895,17 @@ def main():
     if args.output_dir is None:
         args.output_dir = f"checkpoints/phase7/exp{args.exp}"
 
-    # Force learned_importance for exp6
+    # Force learned_importance for exp5/6
     if args.exp in (5, 6):
         args.learned_importance = True
 
-    # Load vision heads
+    # Force dynamic_heads for exp7
+    if args.exp == 7:
+        args.dynamic_heads = True
+        # Exp7 uses gated GDPO by default
+        args.gdpo = True
+
+    # Load vision heads (used as fallback for exp7 if dynamic selection fails)
     vision_heads = list(DEFAULT_VISION_HEADS[:args.top_k_heads])
     if os.path.exists(args.calibration_file):
         try:
