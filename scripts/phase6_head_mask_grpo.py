@@ -463,7 +463,8 @@ def compute_adaptive_head_lsr(model, processor, sample, candidate_ids,
 
 def compute_soft_weighted_head_lsr(model, processor, sample, candidate_ids,
                                     think_range, device, hooks,
-                                    temperature="auto"):
+                                    temperature="auto", temp_scale=1.0,
+                                    layer_aware=False, top_p_heads=0.0):
     """Exp9: Soft-weighted ALL-head LSR scoring with continuous sigmoid weights.
 
     Instead of top-K discrete selection (Exp8), ALL 448 heads contribute with
@@ -554,15 +555,44 @@ def compute_soft_weighted_head_lsr(model, processor, sample, candidate_ids,
     std_d = float(all_deltas.std()) + 1e-6
 
     if temperature == "auto":
-        T = std_d  # adaptive: scale with delta distribution
+        T = std_d * temp_scale  # adaptive, scaled by temp_scale
     else:
-        T = float(temperature)
+        T = float(temperature) * temp_scale
     T = max(T, 1e-6)  # prevent division by zero
+
+    # Layer-aware bonuses (Exp11)
+    DECISION_LAYERS = {4, 5}
+    FEATURE_LAYERS = {24, 25, 26, 27}
 
     head_weights = {}
     for (l, h), delta in head_deltas.items():
         w = 1.0 / (1.0 + np.exp(-(delta - mean_d) / T))
+        # Exp11: layer-aware bonus
+        if layer_aware:
+            if l in DECISION_LAYERS:
+                w *= 2.0  # decision heads get 2× weight
+            elif l in FEATURE_LAYERS:
+                w *= 1.5  # feature heads get 1.5× weight
         head_weights[(l, h)] = w
+
+    # Exp12: Top-P head selection (soft pruning)
+    if top_p_heads > 0:
+        sorted_items = sorted(head_weights.items(), key=lambda x: x[1], reverse=True)
+        total_w = sum(w for _, w in sorted_items)
+        if total_w > 0:
+            cumsum = 0.0
+            threshold_idx = len(sorted_items)
+            target = total_w * top_p_heads
+            for idx, (key, w) in enumerate(sorted_items):
+                cumsum += w
+                if cumsum >= target:
+                    threshold_idx = idx + 1
+                    break
+            # Zero-out heads below threshold
+            kept_keys = set(k for k, _ in sorted_items[:threshold_idx])
+            for key in list(head_weights.keys()):
+                if key not in kept_keys:
+                    head_weights[key] = 0.0
 
     # Per-token score: weighted sum over all heads with w > 0.01
     scores = torch.zeros(think_len, device=device)
@@ -1011,6 +1041,9 @@ def compute_rewards_soft_weighted(model, processor, sample, candidates,
     qtype = sample.get("type", "short_answer")
     answers_all = sample.get("answers_all")
     soft_temp = cfg.get("soft_temperature", "auto")
+    soft_temp_scale = cfg.get("soft_temperature_scale", 1.0)
+    soft_layer_aware = cfg.get("layer_aware", False)
+    soft_top_p = cfg.get("top_p_heads", 0.0)
 
     # Phase 1: Compute raw rewards for ALL candidates
     for cand, cand_ids, t_range in zip(candidates, cand_ids_list, think_ranges):
@@ -1020,7 +1053,8 @@ def compute_rewards_soft_weighted(model, processor, sample, candidates,
         try:
             head_scores, mean_score, think_len, hw = compute_soft_weighted_head_lsr(
                 model, processor, sample, cand_ids, t_range, device, hooks,
-                temperature=soft_temp)
+                temperature=soft_temp, temp_scale=soft_temp_scale,
+                layer_aware=soft_layer_aware, top_p_heads=soft_top_p)
         except Exception:
             head_scores = torch.zeros(0, device=device)
             mean_score, think_len = 0.0, 0
@@ -1314,6 +1348,109 @@ def evaluate_blind(model, processor, samples, device, n=50):
     return {"real_acc": ra, "blind_acc": ba, "gap": ra - ba, "total": total}
 
 
+def evaluate_mme(model, processor, device, max_pairs=100):
+    """Evaluate on MME benchmark (Perception + Cognition).
+
+    MME scoring: each image has 2 questions (yes/no variant).
+    Image scores 1 point only if BOTH are answered correctly.
+    """
+    from qwen_vl_utils import process_vision_info
+    was_training = model.training
+    model.eval()
+    if hasattr(model, 'gradient_checkpointing_disable'):
+        model.gradient_checkpointing_disable()
+
+    # Load MME data
+    mme_path = Path("data/eval/mme")
+    if not mme_path.exists():
+        print("[mme] No local data, skipping MME eval")
+        if was_training:
+            model.train()
+            if hasattr(model, 'gradient_checkpointing_enable'):
+                model.gradient_checkpointing_enable()
+        return {"perception": 0, "cognition": 0, "total": 0, "n_pairs": 0}
+
+    from datasets import load_from_disk
+    ds = load_from_disk(str(mme_path))
+
+    PERCEPTION = ["existence", "count", "position", "color", "posters",
+                  "celebrity", "scene", "landmark", "artwork", "OCR"]
+    COGNITION = ["commonsense_reasoning", "numerical_calculation",
+                 "text_translation", "code_reasoning"]
+
+    # Group by question_id
+    grouped = defaultdict(list)
+    for i in range(len(ds)):
+        row = ds[i]
+        grouped[row["question_id"]].append({
+            "question": row["question"],
+            "answer": row["answer"].strip(),
+            "category": row["category"],
+            "image": row["image"],
+        })
+
+    pairs = list(grouped.values())[:max_pairs]
+
+    subtask_correct = defaultdict(int)
+    subtask_total = defaultdict(int)
+
+    for pair in pairs:
+        cat = pair[0]["category"]
+        subtask_total[cat] += 1
+        all_ok = True
+        for q in pair:
+            try:
+                messages = [{"role": "user", "content": [
+                    {"type": "image", "image": q["image"]},
+                    {"type": "text", "text": q["question"]},
+                ]}]
+                text = processor.apply_chat_template(
+                    messages, tokenize=False, add_generation_prompt=True,
+                    enable_thinking=True)
+                images, videos, _ = process_vision_info(messages, return_video_kwargs=True)
+                inputs = processor(text=[text], images=images, videos=videos,
+                                   return_tensors="pt", padding=True)
+                inputs = {k: v.to(device) for k, v in inputs.items()}
+                with torch.no_grad():
+                    out = model.generate(**inputs, max_new_tokens=512, do_sample=False)
+                raw = processor.tokenizer.decode(
+                    out[0][inputs["input_ids"].shape[1]:], skip_special_tokens=False)
+                for tok in ["<|im_end|>", "<|endoftext|>", "<|im_start|>"]:
+                    raw = raw.replace(tok, "")
+                pred = extract_yes_no(raw)
+                if pred != q["answer"]:
+                    all_ok = False
+            except Exception:
+                all_ok = False
+        if all_ok:
+            subtask_correct[cat] += 1
+
+    # Compute aggregate scores
+    perc_score = sum(subtask_correct.get(s, 0) for s in PERCEPTION
+                     if s in subtask_total)
+    perc_total = sum(subtask_total.get(s, 0) for s in PERCEPTION
+                     if s in subtask_total)
+    cog_score = sum(subtask_correct.get(s, 0) for s in COGNITION
+                    if s in subtask_total)
+    cog_total = sum(subtask_total.get(s, 0) for s in COGNITION
+                    if s in subtask_total)
+
+    if was_training:
+        model.train()
+        if hasattr(model, 'gradient_checkpointing_enable'):
+            model.gradient_checkpointing_enable()
+
+    return {
+        "perception": perc_score / perc_total if perc_total > 0 else 0,
+        "cognition": cog_score / cog_total if cog_total > 0 else 0,
+        "perc_score": perc_score, "perc_total": perc_total,
+        "cog_score": cog_score, "cog_total": cog_total,
+        "n_pairs": len(pairs),
+        "subtasks": {k: {"correct": subtask_correct.get(k, 0),
+                         "total": v} for k, v in subtask_total.items()},
+    }
+
+
 # ══════════════════════════════════════════════════════════════════════
 #  Report Generation
 # ══════════════════════════════════════════════════════════════════════
@@ -1549,18 +1686,29 @@ def run_training(cfg, train_data, eval_data, model_path=None,
         thresholds = cfg.get("curriculum_thresholds", [100, 200, 999])
         curriculum_bins = build_curriculum_bins(train_data, think_cache, thresholds)
 
+    # Eval sample sizes (configurable)
+    n_pope = cfg.get("eval_pope_samples", 60)
+    n_blind = cfg.get("eval_blind_samples", 50)
+    n_tvqa = cfg.get("eval_textvqa_samples", 50)
+    n_mme = cfg.get("eval_mme_pairs", 0)
+
     # Pre-eval
-    print("Pre-training eval...")
-    pre_textvqa = evaluate_textvqa(model, processor, textvqa_eval_data or [], device, 50) \
+    print(f"Pre-training eval (POPE={n_pope}, Blind={n_blind}, TextVQA={n_tvqa}, MME={n_mme})...")
+    pre_textvqa = evaluate_textvqa(model, processor, textvqa_eval_data or [], device, n_tvqa) \
         if textvqa_eval_data else {"acc": 0, "total": 0}
-    pre_pope = evaluate_pope(model, processor, eval_data, device, 60)
-    pre_blind = evaluate_blind(model, processor, eval_data, device, 50)
-    print(f"  TextVQA: {pre_textvqa['acc']:.1%} | POPE: {pre_pope['acc']:.1%} | Gap: {pre_blind['gap']:.1%}")
+    pre_pope = evaluate_pope(model, processor, eval_data, device, n_pope)
+    pre_blind = evaluate_blind(model, processor, eval_data, device, n_blind)
+    pre_mme = evaluate_mme(model, processor, device, n_mme) if n_mme > 0 else None
+    eval_msg = f"  TextVQA: {pre_textvqa['acc']:.1%} | POPE: {pre_pope['acc']:.1%} | Gap: {pre_blind['gap']:.1%}"
+    if pre_mme:
+        eval_msg += f" | MME P={pre_mme['perception']:.1%} C={pre_mme['cognition']:.1%}"
+    print(eval_msg)
 
     history = {
         "config": {k: v for k, v in cfg.items() if k != "vision_heads"},
         "vision_heads": [(l, h, d) for l, h, d in cfg["vision_heads"]],
-        "pre_eval": {"textvqa": pre_textvqa, "pope": pre_pope, "blind": pre_blind},
+        "pre_eval": {"textvqa": pre_textvqa, "pope": pre_pope, "blind": pre_blind,
+                     **({"mme": pre_mme} if pre_mme else {})},
         "steps": [], "evals": [],
     }
 
@@ -1741,17 +1889,25 @@ def run_training(cfg, train_data, eval_data, model_path=None,
         # Eval
         if (step + 1) % cfg["eval_every"] == 0 or step + 1 == cfg["num_steps"]:
             tvqa_res = evaluate_textvqa(model, processor,
-                                         textvqa_eval_data or [], device, 50) \
+                                         textvqa_eval_data or [], device, n_tvqa) \
                 if textvqa_eval_data else {"acc": 0, "total": 0}
-            pope_res = evaluate_pope(model, processor, eval_data, device, 60)
-            blind_res = evaluate_blind(model, processor, eval_data, device, 50)
-            print(f"  === Eval step {step+1}: "
-                  f"TextVQA={tvqa_res['acc']:.1%} "
-                  f"POPE={pope_res['acc']:.1%} "
-                  f"Gap={blind_res['gap']:.1%} ===")
-            history["evals"].append({
-                "step": step + 1, "textvqa": tvqa_res,
-                "pope": pope_res, "blind": blind_res})
+            pope_res = evaluate_pope(model, processor, eval_data, device, n_pope)
+            blind_res = evaluate_blind(model, processor, eval_data, device, n_blind)
+            mme_res = evaluate_mme(model, processor, device, n_mme) if n_mme > 0 else None
+            eval_msg = (f"  === Eval step {step+1}: "
+                        f"TextVQA={tvqa_res['acc']:.1%} "
+                        f"POPE={pope_res['acc']:.1%} "
+                        f"Gap={blind_res['gap']:.1%}")
+            if mme_res:
+                eval_msg += (f" MME P={mme_res['perception']:.1%} "
+                            f"C={mme_res['cognition']:.1%}")
+            eval_msg += " ==="
+            print(eval_msg)
+            eval_entry = {"step": step + 1, "textvqa": tvqa_res,
+                          "pope": pope_res, "blind": blind_res}
+            if mme_res:
+                eval_entry["mme"] = mme_res
+            history["evals"].append(eval_entry)
 
             # Track best by TextVQA (primary metric)
             metric = tvqa_res["acc"] if tvqa_res["total"] > 0 else pope_res["acc"]
@@ -1824,6 +1980,14 @@ def main():
     parser.add_argument("--max-new-tokens", type=int, default=512)
     parser.add_argument("--min-think-tokens", type=int, default=32)
     parser.add_argument("--eval-every", type=int, default=5)
+    parser.add_argument("--eval-pope-samples", type=int, default=60,
+                        help="POPE eval samples (default 60)")
+    parser.add_argument("--eval-blind-samples", type=int, default=50,
+                        help="Blind test eval samples (default 50)")
+    parser.add_argument("--eval-textvqa-samples", type=int, default=50,
+                        help="TextVQA eval samples (default 50)")
+    parser.add_argument("--eval-mme-pairs", type=int, default=0,
+                        help="MME eval pairs (0=disabled, default 0)")
     parser.add_argument("--max-grad-norm", type=float, default=1.0)
     parser.add_argument("--train-samples", type=int, default=500)
     parser.add_argument("--seed", type=int, default=42)
@@ -1859,6 +2023,12 @@ def main():
     parser.add_argument("--soft-temperature", type=str, default="auto",
                         help="Temperature for sigmoid weights ('auto'=std(deltas), "
                              "or float value)")
+    parser.add_argument("--soft-temperature-scale", type=float, default=1.0,
+                        help="Multiply temperature by this (Exp10: 0.33 for sharper)")
+    parser.add_argument("--layer-aware", action="store_true",
+                        help="Exp11: Layer-aware weighting (decision 2×, feature 1.5×)")
+    parser.add_argument("--top-p-heads", type=float, default=0.0,
+                        help="Exp12: Top-P head selection (0.9 keeps top 90%% weight)")
     # Curriculum by think length
     parser.add_argument("--curriculum", action="store_true",
                         help="Enable think-length curriculum (short→long)")
