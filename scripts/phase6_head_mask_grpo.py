@@ -98,11 +98,63 @@ def find_think_token_range(tokenizer, gen_ids):
 #  Data Loading
 # ══════════════════════════════════════════════════════════════════════
 
-def load_training_data(limit=500, seed=42):
-    """Load TextVQA train — open-ended, image-dependent, same format as eval."""
+def load_mme_train_data(max_samples=500, eval_reserve=200, seed=42):
+    """Load MME data for training, excluding first eval_reserve question_ids (reserved for eval)."""
+    from datasets import load_from_disk
+    rng = random.Random(seed)
+    mme_path = Path("data/eval/mme")
+    if not mme_path.exists():
+        print("[data] No MME data found, skipping MME train")
+        return []
+
+    ds = load_from_disk(str(mme_path))
+
+    # Group by question_id (same as evaluate_mme)
+    grouped = defaultdict(list)
+    for i in range(len(ds)):
+        row = ds[i]
+        grouped[row["question_id"]].append(row)
+
+    # Reserve first eval_reserve question_ids for eval (matches evaluate_mme ordering)
+    all_qids = list(grouped.keys())
+    eval_qids = set(all_qids[:eval_reserve])
+    train_qids = [qid for qid in all_qids if qid not in eval_qids]
+
+    samples = []
+    for qid in train_qids:
+        for row in grouped[qid]:
+            img = row.get("image")
+            if img is None:
+                continue
+            ans = row["answer"].strip()
+            samples.append({
+                "question": row["question"],
+                "answer": ans, "image": img,
+                "answers_all": [ans],
+                "type": "yes_no", "source": "mme",
+            })
+
+    rng.shuffle(samples)
+    samples = samples[:max_samples]
+    print(f"[data] MME train: {len(samples)} samples "
+          f"(excluded {len(eval_qids)} eval question_ids)")
+    return samples
+
+
+def load_training_data(limit=500, seed=42, include_mme=False, mme_ratio=0.3,
+                       mme_eval_reserve=200):
+    """Load TextVQA train + optional MME train data."""
     from datasets import load_dataset
     rng = random.Random(seed)
     samples = []
+
+    # Compute per-source limits
+    if include_mme:
+        mme_limit = int(limit * mme_ratio)
+        textvqa_limit = limit - mme_limit
+    else:
+        textvqa_limit = limit
+        mme_limit = 0
 
     print("[data] Loading TextVQA train...")
     try:
@@ -122,12 +174,19 @@ def load_training_data(limit=500, seed=42):
                 "type": "short_answer", "source": "textvqa",
             })
             count += 1
-            if count >= limit * 2: break  # Load extra, shuffle, then trim
+            if count >= textvqa_limit * 2: break  # Load extra, shuffle, then trim
     except Exception as e:
         print(f"  TextVQA error: {e}")
 
     rng.shuffle(samples)
-    samples = samples[:limit]
+    samples = samples[:textvqa_limit]
+
+    # Add MME train data
+    if include_mme and mme_limit > 0:
+        mme_samples = load_mme_train_data(mme_limit, mme_eval_reserve, seed)
+        samples.extend(mme_samples)
+        rng.shuffle(samples)
+
     src = Counter(s["source"] for s in samples)
     print(f"[data] {len(samples)} training samples "
           f"({', '.join(f'{k}={v}' for k, v in src.items())})")
@@ -1990,6 +2049,12 @@ def main():
                         help="MME eval pairs (0=disabled, default 0)")
     parser.add_argument("--max-grad-norm", type=float, default=1.0)
     parser.add_argument("--train-samples", type=int, default=500)
+    parser.add_argument("--include-mme-train", action="store_true",
+                        help="Include MME data in training (excludes eval samples)")
+    parser.add_argument("--mme-ratio", type=float, default=0.3,
+                        help="Fraction of train-samples to fill with MME (default 0.3)")
+    parser.add_argument("--mme-eval-reserve", type=int, default=200,
+                        help="Number of MME question_ids reserved for eval (default 200)")
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--top-k-heads", type=int, default=12,
                         help="Number of top vision heads to use")
@@ -2084,7 +2149,11 @@ def main():
         cfg.pop("curriculum_phases", None)
         cfg.pop("curriculum_thresholds", None)
 
-    train_data = load_training_data(args.train_samples, args.seed)
+    train_data = load_training_data(
+        args.train_samples, args.seed,
+        include_mme=args.include_mme_train,
+        mme_ratio=args.mme_ratio,
+        mme_eval_reserve=args.mme_eval_reserve)
     pope_eval_data = load_pope_eval(300)
     textvqa_eval_data = load_textvqa_eval(200)
 
