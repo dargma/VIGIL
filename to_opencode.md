@@ -19,9 +19,10 @@ This document provides step-by-step instructions to reproduce the entire VIGIL p
 11. [Training — Exp6: Learned Head Importance + Gated LSR](#11-training--exp6-learned-head-importance--gated-lsr)
 12. [Training — Exp7: Dynamic Head Selection (FAILED)](#12-training--exp7-dynamic-head-selection-failed)
 13. [Training — Exp8: Per-Rollout Adaptive Head Gate](#13-training--exp8-per-rollout-adaptive-head-gate)
-14. [Evaluation](#14-evaluation)
-15. [Expected Results](#15-expected-results)
-16. [Troubleshooting](#16-troubleshooting)
+14. [Training — Exp9: Soft-Weighted All-Head LSR](#14-training--exp9-soft-weighted-all-head-lsr)
+15. [Evaluation](#15-evaluation)
+16. [Expected Results](#16-expected-results)
+17. [Troubleshooting](#17-troubleshooting)
 
 ---
 
@@ -707,7 +708,82 @@ PYTHONUNBUFFERED=1 python -u scripts/phase6_head_mask_grpo.py \
 
 ---
 
-## 14. Evaluation
+## 14. Training — Exp9: Soft-Weighted All-Head LSR
+
+### Motivation
+
+Exp8 selects top-K heads per sample — but this is a discrete cutoff. Problems:
+
+1. **Top-K is discrete**: Heads #12 and #13 might have delta 5.1 and 5.0, but one gets full weight and the other gets zero
+2. **Not all vision heads should have high score**: Some heads do vision processing with LOWER activation (suppression heads that quiet non-visual noise)
+3. **Mixed text/vision heads ignored**: A head at 0.5 weight (dual-use) carries useful signal but gets discarded by top-K
+4. **Model internals are continuous**: Attention weights are soft distributions, not discrete top-K
+
+### Core Idea
+
+Replace discrete top-K selection with **continuous sigmoid weights** derived from the activation delta:
+
+```
+weight(l, h) = sigmoid((delta(l,h) - mean_delta) / temperature)
+score(t) = Σ_{all l,h} weight(l,h) × ||act_real[l,h,t] - act_black[l,h,t]|| / Σ weight
+```
+
+- **ALL 448 heads contribute** — no hard cutoff
+- High-delta heads → weight ≈ 1.0 (strong vision signal)
+- Low-delta heads → weight ≈ 0.0 (text-only, negligible but non-zero)
+- Mixed heads (delta ≈ mean) → weight ≈ 0.5 (dual text+vision use)
+- Temperature is adaptive: `T = std(deltas)` — scales with each sample's delta distribution
+- Heads with w < 0.01 are skipped for efficiency (~50-100 heads active vs 12 in Exp8)
+
+### Implementation
+
+Added to `scripts/phase6_head_mask_grpo.py`:
+- `compute_soft_weighted_head_lsr()` — sigmoid-based continuous weighting
+- `compute_rewards_soft_weighted()` — reward computation with soft weights
+- CLI flags: `--soft-weighted-heads`, `--soft-temperature`
+
+### Run Command
+
+```bash
+PYTHONUNBUFFERED=1 python -u scripts/phase6_head_mask_grpo.py \
+    --steps 30 \
+    --alpha 0.5 \
+    --gdpo \
+    --vppo-mask \
+    --gated-head-lsr \
+    --soft-weighted-heads \
+    --soft-temperature auto \
+    --eval-every 5 \
+    --lr 2e-6 \
+    --group-size 6 \
+    --temperature 1.3 \
+    --train-samples 1000 \
+    --output-dir checkpoints/exp9_soft_weighted/run1 \
+    2>&1 | tee logs/exp9_soft_weighted.log
+```
+
+### Key Differences from Exp8
+
+| Aspect | Exp8 | Exp9 |
+|--------|------|------|
+| Head selection | Top-12 (discrete) | All 448 (continuous sigmoid weights) |
+| Weight range | 0 or delta_value | sigmoid(0-1) |
+| Mixed heads | Excluded | Included (~0.3-0.7 weight) |
+| Low-delta heads | Excluded | Included (~0.01-0.1 weight) |
+| Temperature | N/A (top-K cutoff) | Adaptive (std of deltas) |
+| Efficiency | 12 heads scored | ~50-100 heads scored (w > 0.01) |
+
+### Expected Behavior
+
+- Log shows `[soft: N active, XH/YM/ZL]` — count of high/mid/low weight heads
+- Expect ~50-100 active heads per sample (w > 0.01)
+- headΔ may be lower than Exp8 (diluted by many low-weight heads)
+- But per-token discrimination should be finer (captures subtle vision signals)
+- POPE target: match or exceed Exp8's 95.0%
+
+---
+
+## 15. Evaluation
 
 ### 12.1 POPE Evaluation
 
@@ -787,7 +863,7 @@ python scripts/run_blind_test.py --model-path checkpoints/phase6c/gated_only/ste
 
 ---
 
-## 15. Expected Results
+## 16. Expected Results
 
 ### Final Results Table
 
@@ -815,7 +891,7 @@ python scripts/run_blind_test.py --model-path checkpoints/phase6c/gated_only/ste
 
 ---
 
-## 16. Troubleshooting
+## 17. Troubleshooting
 
 ### Common Issues
 

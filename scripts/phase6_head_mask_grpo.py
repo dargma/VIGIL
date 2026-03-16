@@ -461,6 +461,140 @@ def compute_adaptive_head_lsr(model, processor, sample, candidate_ids,
     return scores, mean_score, think_len, selected_heads
 
 
+def compute_soft_weighted_head_lsr(model, processor, sample, candidate_ids,
+                                    think_range, device, hooks,
+                                    temperature="auto"):
+    """Exp9: Soft-weighted ALL-head LSR scoring with continuous sigmoid weights.
+
+    Instead of top-K discrete selection (Exp8), ALL 448 heads contribute with
+    sigmoid-based weights derived from their real-vs-black activation delta:
+        w(l,h) = sigmoid((delta(l,h) - mean_delta) / T)
+
+    This captures:
+    - High-delta heads → weight ≈ 1.0 (strong vision signal)
+    - Low-delta heads → weight ≈ 0.0 (text-only, negligible contribution)
+    - Mixed heads (delta ≈ mean) → weight ≈ 0.5 (dual text+vision use)
+    - Suppression heads (low delta but non-zero) → small but non-zero weight
+
+    Temperature is adaptive: T = std(deltas), ensuring weights scale with the
+    distribution of deltas per sample.
+
+    Returns:
+        scores: tensor (think_len,) — weighted per-token activation Δ
+        mean_score: float — sequence-level mean
+        think_len: int
+        head_weights: dict of {(layer, head): weight} — continuous weights for all heads
+    """
+    if candidate_ids.numel() == 0:
+        return torch.zeros(0, device=device), 0.0, 0, {}
+
+    t_start, t_end = think_range
+    if t_end <= t_start:
+        return torch.zeros(0, device=device), 0.0, 0, {}
+
+    image = sample["image"]
+    question = sample["question"]
+    candidate_ids = candidate_ids.clone().detach()
+    n_cand = candidate_ids.numel()
+
+    # Forward with real image (teacher-forced)
+    real_inputs = prepare_inputs(processor, image, question, device)
+    rpl = real_inputs["input_ids"].shape[1]
+    rf = torch.cat([real_inputs["input_ids"], candidate_ids.unsqueeze(0)], dim=1)
+    real_inputs["input_ids"] = rf
+    real_inputs["attention_mask"] = torch.ones_like(rf)
+    hooks.clear()
+    with torch.no_grad():
+        model(**real_inputs)
+    real_acts = hooks.get_all_head_acts(rpl, n_cand)
+
+    # Forward with black image (teacher-forced)
+    black_image = Image.new('RGB', image.size, (0, 0, 0))
+    black_inputs = prepare_inputs(processor, black_image, question, device)
+    bpl = black_inputs["input_ids"].shape[1]
+    bf = torch.cat([black_inputs["input_ids"], candidate_ids.unsqueeze(0)], dim=1)
+    black_inputs["input_ids"] = bf
+    black_inputs["attention_mask"] = torch.ones_like(bf)
+    hooks.clear()
+    with torch.no_grad():
+        model(**black_inputs)
+    black_acts = hooks.get_all_head_acts(bpl, n_cand)
+
+    # Compute per-head mean delta
+    t_end_safe = min(t_end, n_cand)
+    t_start_safe = min(t_start, t_end_safe)
+    think_len = t_end_safe - t_start_safe
+
+    if think_len <= 0:
+        del real_inputs, black_inputs
+        hooks.clear()
+        return torch.zeros(0, device=device), 0.0, 0, {}
+
+    head_deltas = {}
+    for (l, h) in real_acts:
+        if (l, h) not in black_acts:
+            continue
+        ra = real_acts[(l, h)]
+        ba = black_acts[(l, h)]
+        min_len = min(ra.shape[0], ba.shape[0], t_end_safe)
+        if min_len <= t_start_safe:
+            continue
+        diff = (ra[t_start_safe:min_len] - ba[t_start_safe:min_len]).float()
+        mean_delta = diff.norm(dim=-1).mean().item()
+        head_deltas[(l, h)] = mean_delta
+
+    if not head_deltas:
+        del real_inputs, black_inputs, real_acts, black_acts
+        hooks.clear()
+        return torch.zeros(think_len, device=device), 0.0, think_len, {}
+
+    # Compute sigmoid weights for ALL heads
+    all_deltas = np.array(list(head_deltas.values()))
+    mean_d = float(all_deltas.mean())
+    std_d = float(all_deltas.std()) + 1e-6
+
+    if temperature == "auto":
+        T = std_d  # adaptive: scale with delta distribution
+    else:
+        T = float(temperature)
+    T = max(T, 1e-6)  # prevent division by zero
+
+    head_weights = {}
+    for (l, h), delta in head_deltas.items():
+        w = 1.0 / (1.0 + np.exp(-(delta - mean_d) / T))
+        head_weights[(l, h)] = w
+
+    # Per-token score: weighted sum over all heads with w > 0.01
+    scores = torch.zeros(think_len, device=device)
+    total_weight = 0.0
+    n_active = 0
+
+    for (l, h), w in head_weights.items():
+        if w < 0.01:
+            continue
+        ra = real_acts[(l, h)]
+        ba = black_acts[(l, h)]
+        min_len = min(ra.shape[0], ba.shape[0], t_end_safe)
+        if min_len <= t_start_safe:
+            continue
+        diff = (ra[t_start_safe:min_len] - ba[t_start_safe:min_len]).float()
+        per_token_delta = diff.norm(dim=-1)
+
+        effective_len = min(per_token_delta.shape[0], think_len)
+        scores[:effective_len] += per_token_delta[:effective_len] * w
+        total_weight += w
+        n_active += 1
+
+    if total_weight > 0:
+        scores /= total_weight
+
+    mean_score = scores.mean().item()
+
+    del real_inputs, black_inputs, real_acts, black_acts
+    hooks.clear()
+    return scores, mean_score, think_len, head_weights
+
+
 def compute_head_level_lsr(model, processor, sample, candidate_ids,
                            think_range, device, hooks):
     """Compute per-token vision score using HEAD-LEVEL activation differences.
@@ -861,6 +995,137 @@ def compute_rewards_adaptive_head(model, processor, sample, candidates,
     return rewards, details, token_weights_list
 
 
+def compute_rewards_soft_weighted(model, processor, sample, candidates,
+                                  cand_ids_list, think_ranges, prompt_len,
+                                  device, cfg, hooks):
+    """Rewards with soft-weighted all-head scoring (Exp9).
+
+    Same reward structure as Exp8 but uses compute_soft_weighted_head_lsr
+    with continuous sigmoid weights instead of discrete top-K selection.
+    """
+    r_correct_list, r_lsr_list = [], []
+    head_scores_list, think_lens = [], []
+    details, token_weights_list = [], []
+    all_head_weights = []
+    gt = sample["answer"]
+    qtype = sample.get("type", "short_answer")
+    answers_all = sample.get("answers_all")
+    soft_temp = cfg.get("soft_temperature", "auto")
+
+    # Phase 1: Compute raw rewards for ALL candidates
+    for cand, cand_ids, t_range in zip(candidates, cand_ids_list, think_ranges):
+        pred = extract_answer(cand, qtype)
+        r_correct = compute_r_correct(pred, gt, qtype, answers_all=answers_all)
+
+        try:
+            head_scores, mean_score, think_len, hw = compute_soft_weighted_head_lsr(
+                model, processor, sample, cand_ids, t_range, device, hooks,
+                temperature=soft_temp)
+        except Exception:
+            head_scores = torch.zeros(0, device=device)
+            mean_score, think_len = 0.0, 0
+            hw = {}
+
+        r_lsr = min(mean_score / cfg["lsr_scale"], 1.0)
+
+        r_correct_list.append(r_correct)
+        r_lsr_list.append(r_lsr)
+        head_scores_list.append(head_scores)
+        think_lens.append(think_len)
+        all_head_weights.append(hw)
+
+    # Phase 2: GDPO normalization
+    use_gdpo = cfg.get("gdpo", False)
+    use_vppo = cfg.get("vppo_mask", False)
+    use_gated = cfg.get("gated_head_lsr", False)
+
+    correct_has_variance = np.std(r_correct_list) > 1e-6
+
+    if use_gdpo and len(r_correct_list) > 1:
+        w_correct = cfg.get("gdpo_w_correct", 0.6)
+        w_lsr = cfg.get("gdpo_w_lsr", 0.4)
+
+        if use_gated:
+            if correct_has_variance:
+                w_correct, w_lsr = 1.0, 0.0
+            else:
+                w_correct, w_lsr = 0.0, 1.0
+
+        norm_correct = gdpo_normalize(r_correct_list)
+        norm_lsr = gdpo_normalize(r_lsr_list)
+        combined = w_correct * norm_correct + w_lsr * norm_lsr
+        rewards = combined.tolist()
+    else:
+        rewards = []
+        for rc, rl in zip(r_correct_list, r_lsr_list):
+            rewards.append(rc * 0.5 + rc * rl * 0.5)
+
+    # Phase 3: Build per-token weights + decay penalty
+    for i, (cand_ids, t_range) in enumerate(zip(cand_ids_list, think_ranges)):
+        head_scores = head_scores_list[i]
+        decay_pen = compute_decay_penalty(head_scores) if head_scores.numel() >= 2 else 0.0
+        rewards[i] -= cfg["beta_decay"] * decay_pen
+
+        t_start, t_end = t_range
+        n_tokens = cand_ids.numel()
+        token_w = torch.ones(n_tokens, device=device)
+
+        alpha_effective = cfg["alpha"]
+        if use_gated:
+            alpha_effective = 0.0 if correct_has_variance else cfg.get("gated_alpha", cfg["alpha"])
+
+        if head_scores.numel() >= 10 and alpha_effective > 0:
+            norm_scores = normalize_head_scores(head_scores)
+            norm_scores = torch.clamp(norm_scores, 0.0, 5.0)
+            t_end_safe = min(t_end, n_tokens)
+            t_start_safe = min(t_start, t_end_safe)
+            w_len = min(norm_scores.numel(), t_end_safe - t_start_safe)
+            if w_len > 0:
+                if use_vppo:
+                    mask = (norm_scores[:w_len] >= 1.0).float()
+                    token_w[t_start_safe:t_start_safe + w_len] = (
+                        mask * (1.0 + alpha_effective * norm_scores[:w_len]))
+                else:
+                    token_w[t_start_safe:t_start_safe + w_len] = (
+                        1.0 + alpha_effective * norm_scores[:w_len])
+
+        gate_mode = "standard"
+        if use_gated:
+            gate_mode = "correctness" if correct_has_variance else "soft_weighted_lsr"
+
+        # Log head weight stats
+        hw = all_head_weights[i] if i < len(all_head_weights) else {}
+        if hw:
+            w_vals = list(hw.values())
+            n_active = sum(1 for w in w_vals if w >= 0.01)
+            n_high = sum(1 for w in w_vals if w >= 0.8)
+            n_mid = sum(1 for w in w_vals if 0.3 <= w < 0.8)
+            n_low = sum(1 for w in w_vals if 0.01 <= w < 0.3)
+            top5 = sorted(hw.items(), key=lambda x: x[1], reverse=True)[:5]
+            top5_summary = [(l, h, round(w, 3)) for (l, h), w in top5]
+        else:
+            n_active, n_high, n_mid, n_low = 0, 0, 0, 0
+            top5_summary = []
+
+        details.append({
+            "correct": r_correct_list[i],
+            "head_score_raw": r_lsr_list[i] * cfg["lsr_scale"],
+            "decay_penalty": decay_pen,
+            "token_weight_mean": token_w.mean().item(),
+            "token_weight_max": token_w.max().item(),
+            "think_len": think_lens[i],
+            "gate_mode": gate_mode,
+            "n_active_heads": n_active,
+            "n_high_weight": n_high,
+            "n_mid_weight": n_mid,
+            "n_low_weight": n_low,
+            "top5_heads": top5_summary,
+        })
+        token_weights_list.append(token_w)
+
+    return rewards, details, token_weights_list
+
+
 def compute_weighted_logprobs(model, inputs, candidate_ids, prompt_len,
                               token_weights=None):
     """Compute log-probs with optional per-token weighting."""
@@ -1252,11 +1517,17 @@ def run_training(cfg, train_data, eval_data, model_path=None,
 
     # Install vision head hooks (persistent during training)
     use_adaptive = cfg.get("adaptive_heads", False)
-    if use_adaptive:
+    use_soft = cfg.get("soft_weighted_heads", False)
+    if use_adaptive or use_soft:
         hooks = AdaptiveVisionHeadHooks(model, num_layers=28,
                                          num_heads=16, head_dim=128)
-        print(f"[hooks] Adaptive mode: ALL 28 layers hooked (448 heads), "
-              f"top-{cfg.get('adaptive_top_k', 12)} selected per sample")
+        if use_soft:
+            soft_t = cfg.get("soft_temperature", "auto")
+            print(f"[hooks] Exp9 soft-weighted: ALL 28 layers hooked (448 heads), "
+                  f"sigmoid weights, temperature={soft_t}")
+        else:
+            print(f"[hooks] Exp8 adaptive: ALL 28 layers hooked (448 heads), "
+                  f"top-{cfg.get('adaptive_top_k', 12)} selected per sample")
     else:
         hooks = VisionHeadHooks(model, cfg["vision_heads"],
                                 num_heads=16, head_dim=128)
@@ -1327,7 +1598,11 @@ def run_training(cfg, train_data, eval_data, model_path=None,
 
         # Rewards + head-level token weights
         try:
-            if use_adaptive:
+            if use_soft:
+                rewards, details, token_weights_list = compute_rewards_soft_weighted(
+                    model, processor, sample, candidates, cand_ids_list,
+                    think_ranges, prompt_len, device, cfg, hooks)
+            elif use_adaptive:
                 rewards, details, token_weights_list = compute_rewards_adaptive_head(
                     model, processor, sample, candidates, cand_ids_list,
                     think_ranges, prompt_len, device, cfg, hooks)
@@ -1357,7 +1632,11 @@ def run_training(cfg, train_data, eval_data, model_path=None,
                             model, processor, alt_sample, cfg["group_size"],
                             cfg["temperature"], cfg["top_p"],
                             cfg["max_new_tokens"], cfg["min_think_tokens"], device)
-                    if use_adaptive:
+                    if use_soft:
+                        rewards, details, token_weights_list = compute_rewards_soft_weighted(
+                            model, processor, alt_sample, candidates, cand_ids_list,
+                            think_ranges, prompt_len, device, cfg, hooks)
+                    elif use_adaptive:
                         rewards, details, token_weights_list = compute_rewards_adaptive_head(
                             model, processor, alt_sample, candidates, cand_ids_list,
                             think_ranges, prompt_len, device, cfg, hooks)
@@ -1431,19 +1710,33 @@ def run_training(cfg, train_data, eval_data, model_path=None,
             gate_modes = [d.get("gate_mode", "standard") for d in details]
             step_info["gate_mode"] = gate_modes[0] if gate_modes else "standard"
         # Adaptive head tracking
-        if use_adaptive:
+        if use_adaptive and not use_soft:
             top5_heads = details[0].get("selected_heads_top5", []) if details else []
             step_info["adaptive_top5"] = top5_heads
+        # Soft-weighted head tracking
+        if use_soft and details:
+            d0 = details[0]
+            step_info["soft_n_active"] = d0.get("n_active_heads", 0)
+            step_info["soft_n_high"] = d0.get("n_high_weight", 0)
+            step_info["soft_n_mid"] = d0.get("n_mid_weight", 0)
+            step_info["soft_n_low"] = d0.get("n_low_weight", 0)
+            step_info["soft_top5"] = d0.get("top5_heads", [])
         # Curriculum tracking
         if curriculum_bins is not None:
             step_info["curriculum_phase"] = get_curriculum_phase(
                 step, cfg.get("curriculum_phases", [10, 20, 30]))
         history["steps"].append(step_info)
 
-        print(f"  [step {step+1}/{cfg['num_steps']}] "
-              f"loss={loss.item():.4f} r={rarr.mean():.3f}±{rstd:.3f} "
-              f"correct={mc:.2f} headΔ={mh:.3f} decay={md:.3f} "
-              f"tw={tw_mean:.2f}/{tw_max:.1f} ({elapsed:.1f}s)", flush=True)
+        step_msg = (f"  [step {step+1}/{cfg['num_steps']}] "
+                    f"loss={loss.item():.4f} r={rarr.mean():.3f}±{rstd:.3f} "
+                    f"correct={mc:.2f} headΔ={mh:.3f} decay={md:.3f} "
+                    f"tw={tw_mean:.2f}/{tw_max:.1f} ({elapsed:.1f}s)")
+        if use_soft and details:
+            d0 = details[0]
+            step_msg += (f" [soft: {d0.get('n_active_heads',0)} active, "
+                        f"{d0.get('n_high_weight',0)}H/{d0.get('n_mid_weight',0)}M/"
+                        f"{d0.get('n_low_weight',0)}L]")
+        print(step_msg, flush=True)
 
         # Eval
         if (step + 1) % cfg["eval_every"] == 0 or step + 1 == cfg["num_steps"]:
@@ -1559,6 +1852,13 @@ def main():
                              "heads based on real-vs-black activation delta")
     parser.add_argument("--adaptive-top-k", type=int, default=12,
                         help="Number of heads to select per sample (default: 12)")
+    # Exp9: Soft-weighted all-head LSR
+    parser.add_argument("--soft-weighted-heads", action="store_true",
+                        help="Exp9: Use continuous sigmoid weights for ALL 448 heads "
+                             "instead of discrete top-K selection")
+    parser.add_argument("--soft-temperature", type=str, default="auto",
+                        help="Temperature for sigmoid weights ('auto'=std(deltas), "
+                             "or float value)")
     # Curriculum by think length
     parser.add_argument("--curriculum", action="store_true",
                         help="Enable think-length curriculum (short→long)")
@@ -1591,6 +1891,14 @@ def main():
     cfg = vars(args)
     cfg["num_steps"] = cfg.pop("steps")
     cfg["vision_heads"] = vision_heads
+
+    # Soft-weighted temperature parsing
+    soft_t = cfg.get("soft_temperature", "auto")
+    if soft_t != "auto":
+        try:
+            cfg["soft_temperature"] = float(soft_t)
+        except ValueError:
+            cfg["soft_temperature"] = "auto"
 
     # Gated Head-LSR
     cfg["gated_head_lsr"] = cfg.pop("gated_head_lsr", False)
