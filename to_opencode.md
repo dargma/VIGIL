@@ -17,9 +17,11 @@ This document provides step-by-step instructions to reproduce the entire VIGIL p
 9. [Training — Exp4: Head Masking KL](#9-training--exp4-head-masking-kl)
 10. [Training — Exp5: Learned Head Importance + KL](#10-training--exp5-learned-head-importance--kl)
 11. [Training — Exp6: Learned Head Importance + Gated LSR](#11-training--exp6-learned-head-importance--gated-lsr)
-12. [Evaluation](#12-evaluation)
-13. [Expected Results](#13-expected-results)
-14. [Troubleshooting](#14-troubleshooting)
+12. [Training — Exp7: Dynamic Head Selection (FAILED)](#12-training--exp7-dynamic-head-selection-failed)
+13. [Training — Exp8: Per-Rollout Adaptive Head Gate](#13-training--exp8-per-rollout-adaptive-head-gate)
+14. [Evaluation](#14-evaluation)
+15. [Expected Results](#15-expected-results)
+16. [Troubleshooting](#16-troubleshooting)
 
 ---
 
@@ -576,7 +578,136 @@ PYTHONUNBUFFERED=1 python -u scripts/phase7_head_masking_kl.py \
 
 ---
 
-## 12. Evaluation
+## 12. Training — Exp7: Dynamic Head Selection (FAILED)
+
+**Script**: `scripts/phase7_head_masking_kl.py --exp 7`
+
+**Status**: FAILED — no improvement over baseline.
+
+### 12.1 How It Works
+
+Instead of fixed calibrated heads, Exp7 selects heads per-input by examining attention scores to image tokens. For each training sample:
+1. Forward pass with `output_attentions=True`
+2. Find image token range via `<|vision_start|>` / `<|vision_end|>` markers
+3. Compute per-Q-head attention to image region: `score[l,h] = mean(attn[h, :, image_range])`
+4. Select top-K heads by attention score
+5. Use those heads for real-vs-black LSR
+
+### 12.2 Results (1000 samples, 25 steps)
+
+| Step | POPE | Gap | TextVQA | dynLSR |
+|------|------|-----|---------|--------|
+| Pre  | 91.7% | 40.0pp | 72.7% | — |
+| 5    | 91.7% | 40.0pp | 70.7% | 1.5 |
+| 10   | 91.7% | 40.0pp | 72.7% | 1.8 |
+| 15   | 91.7% | 40.0pp | 70.7% | 1.2 |
+| 20   | 90.0% | 38.0pp | 70.7% | 1.5 |
+
+### 12.3 Why It Failed
+
+**Root cause**: Attention-to-image ≠ vision-discriminative.
+- Exp7 selects heads that **attend** to image tokens (dynLSR signal: 1-2)
+- Exp1 uses heads that **discriminate** between real and black images (headΔ: 7-10)
+- These are fundamentally different properties. A head can attend heavily to image tokens while producing identical activations for real vs black images.
+
+### 12.4 Lesson Learned
+
+The signal quality matters more than input-adaptivity. Exp1's fixed 12 calibrated heads (selected by Cohen's d from real/black activation difference) produce 5-10x stronger signal than Exp7's dynamically selected heads.
+
+This motivates Exp8: use the real-vs-black delta (Exp1's strong signal) for BOTH head selection AND scoring.
+
+---
+
+## 13. Training — Exp8: Per-Rollout Adaptive Head Gate
+
+**Script**: `scripts/phase6_head_mask_grpo.py --adaptive-heads`
+
+**Status**: NEW — addresses Exp7's failure by using real-vs-black activation delta (Exp1's proven signal) for per-sample head selection.
+
+### 13.1 Core Idea
+
+Combine Exp1's proven signal strength with input-adaptivity:
+- Hook ALL 28 layers (448 heads total)
+- During LSR computation, compute real-vs-black activation delta for ALL heads
+- Select top-K heads by mean delta FOR THIS SPECIFIC SAMPLE
+- Compute per-token LSR scores using only those K heads
+
+**Zero extra cost**: LSR already performs real and black image forward passes. Head selection reuses those same activations.
+
+### 13.2 How It Works
+
+```python
+# 1. Hook all 28 layers (all 448 heads captured)
+hooks = AdaptiveVisionHeadHooks(model, num_layers=28, num_heads=16, head_dim=128)
+
+# 2. For each candidate, compute LSR:
+#    a) Forward with real image → capture ALL head activations
+#    b) Forward with black image → capture ALL head activations
+#    c) Compute per-head mean delta: delta[l,h] = mean_t(||act_real[l,h,t] - act_black[l,h,t]||)
+#    d) Select top-K heads by delta
+#    e) Per-token score: score(t) = Σ_{selected} delta[l,h] × ||act_real[l,h,t] - act_black[l,h,t]||
+
+# 3. Gating (same as Exp1):
+#    If R_correct has variance → use R_correct only
+#    Else → use adaptive head-LSR with per-token weights
+```
+
+### 13.3 Key Differences from Exp1
+
+| Aspect | Exp1 (Fixed) | Exp8 (Adaptive) |
+|--------|-------------|-----------------|
+| Head count | 12 (fixed from calibration) | top-K per sample (from all 448) |
+| Selection criterion | Cohen's d (offline, from calibration) | Real-vs-black delta (online, per sample) |
+| Hooks | 7 layers (where calibrated heads are) | All 28 layers |
+| Signal source | Same: real-vs-black activation delta | Same: real-vs-black activation delta |
+| Extra cost | None | None (reuses LSR forward passes) |
+
+### 13.4 Why This Should Work
+
+1. **Strong signal**: Uses the same real-vs-black delta as Exp1 (headΔ 5-12), not attention scores (Exp7's weak dynLSR 1-2)
+2. **Input-adaptive**: Different images activate different vision heads. A face image vs a text image may use different heads.
+3. **Broader coverage**: Can discover important heads outside the fixed top-12 that are relevant for specific inputs
+4. **Self-consistent**: The heads used for scoring are the ones most responsive to THIS image
+
+### 13.5 Run Command
+
+```bash
+PYTHONUNBUFFERED=1 python -u scripts/phase6_head_mask_grpo.py \
+    --steps 30 \
+    --alpha 0.5 \
+    --gdpo \
+    --vppo-mask \
+    --gated-head-lsr \
+    --adaptive-heads \
+    --adaptive-top-k 12 \
+    --eval-every 5 \
+    --lr 2e-6 \
+    --group-size 6 \
+    --temperature 1.3 \
+    --train-samples 1000 \
+    --output-dir checkpoints/exp8_adaptive_head/run1 \
+    2>&1 | tee logs/exp8_adaptive_head.log
+```
+
+### 13.6 Key Parameters
+
+| Parameter | Value | Meaning |
+|-----------|-------|---------|
+| `--adaptive-heads` | flag | Enable per-rollout adaptive head selection |
+| `--adaptive-top-k` | 12 | Number of heads to select per sample |
+| `--gated-head-lsr` | flag | Gate between R_correct and adaptive head-LSR |
+| Other params | Same as Exp1 | GDPO, VPPO, alpha, lr, etc. |
+
+### 13.7 Expected Behavior
+
+- `headΔ` should be comparable to Exp1 (5-12 range) since we use the same signal
+- Selected heads may vary across samples (the whole point of adaptivity)
+- POPE should match or exceed Exp1's 93.3% (at 1000 samples scale)
+- Log shows `gate_mode=adaptive_head_lsr` when correctness has zero variance
+
+---
+
+## 14. Evaluation
 
 ### 12.1 POPE Evaluation
 
@@ -656,20 +787,23 @@ python scripts/run_blind_test.py --model-path checkpoints/phase6c/gated_only/ste
 
 ---
 
-## 13. Expected Results
+## 15. Expected Results
 
 ### Final Results Table
 
 ```
-┌────────────────────────────────────────────────┬───────┬────────┬─────────┬─────────────────────────────┐
-│             Experiment                         │ POPE  │  Gap   │ TextVQA │             MME             │
-├────────────────────────────────────────────────┼───────┼────────┼─────────┼─────────────────────────────┤
-│ Baseline (HF Thinking)                         │ 91.7% │ 40.0pp │ 72.7%   │ 145/196 (P:96/140, C:49/56) │
-│ Exp1: Gated Head-LSR (step 10)                 │ 95.0% │ 44.0pp │ 74.7%   │ TBD                         │
-│ Exp4: Head Masking KL (step 10)                │ TBD   │ TBD    │ TBD     │ —                           │
-│ Exp5: Learned Head Importance + KL (step 10)   │ TBD   │ TBD    │ TBD     │ —                           │
-│ Exp6: Learned Head Importance + LSR (step 10)  │ TBD   │ TBD    │ TBD     │ —                           │
-└────────────────────────────────────────────────┴───────┴────────┴─────────┴─────────────────────────────┘
+┌──────────────────────────────────────────────────┬───────┬────────┬─────────┬──────────┐
+│             Experiment                           │ POPE  │  Gap   │ TextVQA │  Status  │
+├──────────────────────────────────────────────────┼───────┼────────┼─────────┼──────────┤
+│ Baseline (HF Thinking)                           │ 91.7% │ 40.0pp │ 72.7%   │ Done     │
+│ Exp1: Gated Head-LSR (500 samples, step 10)      │ 95.0% │ 44.0pp │ 74.7%   │ BEST     │
+│ Exp1: Gated Head-LSR (1K samples, step 10)       │ 93.3% │ 42.0pp │ 72.7%   │ Done     │
+│ Exp4: Head Masking KL (step 15)                  │ 90.0% │ 38.0pp │ 72.7%   │ No gain  │
+│ Exp5: Learned Importance + KL (step 15)          │ 90.0% │ 38.0pp │ 72.7%   │ FAILED   │
+│ Exp6: Learned Importance + LSR (step 15)         │ 90.0% │ 38.0pp │ 70.7%   │ FAILED   │
+│ Exp7: Dynamic Head Selection (1K, step 25)       │ 91.7% │ 40.0pp │ 70.7%   │ FAILED   │
+│ Exp8: Adaptive Head Gate (1K, step ?)            │ TBD   │ TBD    │ TBD     │ PENDING  │
+└──────────────────────────────────────────────────┴───────┴────────┴─────────┴──────────┘
 ```
 
 ### Key Metrics
@@ -681,7 +815,7 @@ python scripts/run_blind_test.py --model-path checkpoints/phase6c/gated_only/ste
 
 ---
 
-## 14. Troubleshooting
+## 16. Troubleshooting
 
 ### Common Issues
 
@@ -725,8 +859,8 @@ Eval needs less memory than training but may spike with long Thinking outputs. S
 
 | Purpose | File |
 |---------|------|
-| Exp1 training | `scripts/phase6_head_mask_grpo.py` |
-| Exp4/5/6 training | `scripts/phase7_head_masking_kl.py` |
+| Exp1 + Exp8 training | `scripts/phase6_head_mask_grpo.py` |
+| Exp4/5/6/7 training | `scripts/phase7_head_masking_kl.py` |
 | Calibration | `scripts/calibrate.py` |
 | POPE/TextVQA eval | `scripts/eval_official.py` |
 | Blind test | `scripts/run_blind_test.py` |

@@ -302,6 +302,165 @@ class VisionHeadHooks:
         self._captured.clear()
 
 
+class AdaptiveVisionHeadHooks:
+    """Hook ALL 28 layers to capture ALL 448 heads for per-rollout adaptive selection.
+
+    Unlike VisionHeadHooks (fixed 12 heads on 7 layers), this captures everything
+    so we can select top-K heads per sample based on real-vs-black activation delta.
+    Zero extra cost: LSR already does real/black forward passes.
+    """
+
+    def __init__(self, model, num_layers=28, num_heads=16, head_dim=128):
+        self.num_layers = num_layers
+        self.num_heads = num_heads
+        self.head_dim = head_dim
+        self._captured = {}
+        self._hooks = []
+
+        layers = model.model.language_model.layers
+        for li in range(num_layers):
+            o_proj = layers[li].self_attn.o_proj
+
+            def make_hook(layer_idx):
+                def hook_fn(module, args):
+                    self._captured[layer_idx] = args[0].detach()
+                return hook_fn
+
+            handle = o_proj.register_forward_pre_hook(make_hook(li))
+            self._hooks.append(handle)
+
+    def get_all_head_acts(self, prompt_len, seq_len):
+        """Get activations for ALL heads across ALL layers.
+        Returns: dict of (layer, head) -> (seq_len, head_dim)
+        """
+        result = {}
+        for li in range(self.num_layers):
+            inp = self._captured.get(li)
+            if inp is None:
+                continue
+            reshaped = inp[0].view(-1, self.num_heads, self.head_dim)
+            for hi in range(self.num_heads):
+                cand_acts = reshaped[prompt_len:prompt_len + seq_len, hi, :]
+                result[(li, hi)] = cand_acts
+        return result
+
+    # Also support the fixed-head interface for compatibility
+    def get_per_token_head_acts(self, prompt_len, seq_len):
+        return self.get_all_head_acts(prompt_len, seq_len)
+
+    def clear(self):
+        self._captured.clear()
+
+    def remove(self):
+        for h in self._hooks:
+            h.remove()
+        self._hooks.clear()
+        self._captured.clear()
+
+
+def compute_adaptive_head_lsr(model, processor, sample, candidate_ids,
+                              think_range, device, hooks, top_k=12):
+    """Per-rollout adaptive head selection + LSR scoring.
+
+    Like compute_head_level_lsr but selects top-K heads PER SAMPLE based on
+    real-vs-black activation delta across ALL 448 heads.
+
+    Returns:
+        head_scores: tensor of shape (think_len,) — per-token head activation Δ
+        mean_score: float — sequence-level mean
+        think_len: int
+        selected_heads: list of (layer, head, mean_delta) — top-K heads for this sample
+    """
+    if candidate_ids.numel() == 0:
+        return torch.zeros(0, device=device), 0.0, 0, []
+
+    t_start, t_end = think_range
+    if t_end <= t_start:
+        return torch.zeros(0, device=device), 0.0, 0, []
+
+    image = sample["image"]
+    question = sample["question"]
+    candidate_ids = candidate_ids.clone().detach()
+    n_cand = candidate_ids.numel()
+
+    # Forward with real image (teacher-forced)
+    real_inputs = prepare_inputs(processor, image, question, device)
+    rpl = real_inputs["input_ids"].shape[1]
+    rf = torch.cat([real_inputs["input_ids"], candidate_ids.unsqueeze(0)], dim=1)
+    real_inputs["input_ids"] = rf
+    real_inputs["attention_mask"] = torch.ones_like(rf)
+    hooks.clear()
+    with torch.no_grad():
+        model(**real_inputs)
+    real_acts = hooks.get_all_head_acts(rpl, n_cand)
+
+    # Forward with black image (teacher-forced)
+    black_image = Image.new('RGB', image.size, (0, 0, 0))
+    black_inputs = prepare_inputs(processor, black_image, question, device)
+    bpl = black_inputs["input_ids"].shape[1]
+    bf = torch.cat([black_inputs["input_ids"], candidate_ids.unsqueeze(0)], dim=1)
+    black_inputs["input_ids"] = bf
+    black_inputs["attention_mask"] = torch.ones_like(bf)
+    hooks.clear()
+    with torch.no_grad():
+        model(**black_inputs)
+    black_acts = hooks.get_all_head_acts(bpl, n_cand)
+
+    # Compute per-head mean delta across thinking token positions
+    t_end_safe = min(t_end, n_cand)
+    t_start_safe = min(t_start, t_end_safe)
+    think_len = t_end_safe - t_start_safe
+
+    if think_len <= 0:
+        del real_inputs, black_inputs
+        hooks.clear()
+        return torch.zeros(0, device=device), 0.0, 0, []
+
+    head_deltas = {}  # (layer, head) -> mean delta
+    for (l, h) in real_acts:
+        if (l, h) not in black_acts:
+            continue
+        ra = real_acts[(l, h)]
+        ba = black_acts[(l, h)]
+        min_len = min(ra.shape[0], ba.shape[0], t_end_safe)
+        if min_len <= t_start_safe:
+            continue
+        diff = (ra[t_start_safe:min_len] - ba[t_start_safe:min_len]).float()
+        mean_delta = diff.norm(dim=-1).mean().item()
+        head_deltas[(l, h)] = mean_delta
+
+    # Select top-K heads by mean delta for this sample
+    sorted_heads = sorted(head_deltas.items(), key=lambda x: x[1], reverse=True)
+    selected = sorted_heads[:top_k]
+    selected_heads = [(l, h, d) for (l, h), d in selected]
+
+    # Compute per-token scores using only selected heads (weighted by delta)
+    scores = torch.zeros(think_len, device=device)
+    n_heads_found = 0
+
+    for (l, h), delta in selected:
+        ra = real_acts[(l, h)]
+        ba = black_acts[(l, h)]
+        min_len = min(ra.shape[0], ba.shape[0], t_end_safe)
+        if min_len <= t_start_safe:
+            continue
+        diff = (ra[t_start_safe:min_len] - ba[t_start_safe:min_len]).float()
+        per_token_delta = diff.norm(dim=-1)
+
+        effective_len = min(per_token_delta.shape[0], think_len)
+        scores[:effective_len] += per_token_delta[:effective_len] * delta
+        n_heads_found += 1
+
+    if n_heads_found > 0:
+        scores /= n_heads_found
+
+    mean_score = scores.mean().item()
+
+    del real_inputs, black_inputs, real_acts, black_acts
+    hooks.clear()
+    return scores, mean_score, think_len, selected_heads
+
+
 def compute_head_level_lsr(model, processor, sample, candidate_ids,
                            think_range, device, hooks):
     """Compute per-token vision score using HEAD-LEVEL activation differences.
@@ -578,6 +737,124 @@ def compute_rewards_with_head_lsr(model, processor, sample, candidates,
             "token_weight_max": token_w.max().item(),
             "think_len": think_lens[i],
             "gate_mode": gate_mode,
+        })
+        token_weights_list.append(token_w)
+
+    return rewards, details, token_weights_list
+
+
+def compute_rewards_adaptive_head(model, processor, sample, candidates,
+                                  cand_ids_list, think_ranges, prompt_len,
+                                  device, cfg, hooks):
+    """Rewards with per-rollout adaptive head selection (Exp8).
+
+    Same as compute_rewards_with_head_lsr but uses compute_adaptive_head_lsr
+    to dynamically select top-K heads per sample from ALL 448 heads.
+    """
+    r_correct_list, r_lsr_list = [], []
+    head_scores_list, think_lens = [], []
+    details, token_weights_list = [], []
+    all_selected_heads = []
+    gt = sample["answer"]
+    qtype = sample.get("type", "short_answer")
+    answers_all = sample.get("answers_all")
+    adaptive_top_k = cfg.get("adaptive_top_k", 12)
+
+    # Phase 1: Compute raw rewards for ALL candidates
+    for cand, cand_ids, t_range in zip(candidates, cand_ids_list, think_ranges):
+        pred = extract_answer(cand, qtype)
+        r_correct = compute_r_correct(pred, gt, qtype, answers_all=answers_all)
+
+        try:
+            head_scores, mean_score, think_len, selected = compute_adaptive_head_lsr(
+                model, processor, sample, cand_ids, t_range, device, hooks,
+                top_k=adaptive_top_k)
+        except Exception:
+            head_scores = torch.zeros(0, device=device)
+            mean_score, think_len = 0.0, 0
+            selected = []
+
+        r_lsr = min(mean_score / cfg["lsr_scale"], 1.0)
+
+        r_correct_list.append(r_correct)
+        r_lsr_list.append(r_lsr)
+        head_scores_list.append(head_scores)
+        think_lens.append(think_len)
+        all_selected_heads.append(selected)
+
+    # Phase 2: GDPO normalization (same as fixed-head version)
+    use_gdpo = cfg.get("gdpo", False)
+    use_vppo = cfg.get("vppo_mask", False)
+    use_gated = cfg.get("gated_head_lsr", False)
+
+    correct_has_variance = np.std(r_correct_list) > 1e-6
+
+    if use_gdpo and len(r_correct_list) > 1:
+        w_correct = cfg.get("gdpo_w_correct", 0.6)
+        w_lsr = cfg.get("gdpo_w_lsr", 0.4)
+
+        if use_gated:
+            if correct_has_variance:
+                w_correct, w_lsr = 1.0, 0.0
+            else:
+                w_correct, w_lsr = 0.0, 1.0
+
+        norm_correct = gdpo_normalize(r_correct_list)
+        norm_lsr = gdpo_normalize(r_lsr_list)
+        combined = w_correct * norm_correct + w_lsr * norm_lsr
+        rewards = combined.tolist()
+    else:
+        rewards = []
+        for rc, rl in zip(r_correct_list, r_lsr_list):
+            rewards.append(rc * 0.5 + rc * rl * 0.5)
+
+    # Phase 3: Build per-token weights + decay penalty
+    for i, (cand_ids, t_range) in enumerate(zip(cand_ids_list, think_ranges)):
+        head_scores = head_scores_list[i]
+        decay_pen = compute_decay_penalty(head_scores) if head_scores.numel() >= 2 else 0.0
+        rewards[i] -= cfg["beta_decay"] * decay_pen
+
+        t_start, t_end = t_range
+        n_tokens = cand_ids.numel()
+        token_w = torch.ones(n_tokens, device=device)
+
+        alpha_effective = cfg["alpha"]
+        if use_gated:
+            alpha_effective = 0.0 if correct_has_variance else cfg.get("gated_alpha", cfg["alpha"])
+
+        if head_scores.numel() >= 10 and alpha_effective > 0:
+            norm_scores = normalize_head_scores(head_scores)
+            norm_scores = torch.clamp(norm_scores, 0.0, 5.0)
+            t_end_safe = min(t_end, n_tokens)
+            t_start_safe = min(t_start, t_end_safe)
+            w_len = min(norm_scores.numel(), t_end_safe - t_start_safe)
+            if w_len > 0:
+                if use_vppo:
+                    mask = (norm_scores[:w_len] >= 1.0).float()
+                    token_w[t_start_safe:t_start_safe + w_len] = (
+                        mask * (1.0 + alpha_effective * norm_scores[:w_len]))
+                else:
+                    token_w[t_start_safe:t_start_safe + w_len] = (
+                        1.0 + alpha_effective * norm_scores[:w_len])
+
+        gate_mode = "standard"
+        if use_gated:
+            gate_mode = "correctness" if correct_has_variance else "adaptive_head_lsr"
+
+        # Log selected heads info
+        sel = all_selected_heads[i] if i < len(all_selected_heads) else []
+        sel_summary = [(l, h, round(d, 2)) for l, h, d in sel[:5]]  # top-5 for logging
+
+        details.append({
+            "correct": r_correct_list[i],
+            "head_score_raw": r_lsr_list[i] * cfg["lsr_scale"],
+            "decay_penalty": decay_pen,
+            "token_weight_mean": token_w.mean().item(),
+            "token_weight_max": token_w.max().item(),
+            "think_len": think_lens[i],
+            "gate_mode": gate_mode,
+            "selected_heads_top5": sel_summary,
+            "n_adaptive_heads": len(sel),
         })
         token_weights_list.append(token_w)
 
@@ -955,9 +1232,11 @@ def run_training(cfg, train_data, eval_data, model_path=None,
     vppo_str = "ON" if cfg.get("vppo_mask") else "OFF"
     gated_str = "ON" if cfg.get("gated_head_lsr") else "OFF"
     curric_str = "ON" if cfg.get("curriculum") else "OFF"
+    adapt_str = "ON" if cfg.get("adaptive_heads") else "OFF"
     print(f"\n{'='*70}")
     print(f"  Phase 6c: Head-Level Mask LSR-Weighted GRPO")
-    print(f"  GDPO={gdpo_str} | VPPO={vppo_str} | Gated={gated_str} | Curriculum={curric_str}")
+    print(f"  GDPO={gdpo_str} | VPPO={vppo_str} | Gated={gated_str} | "
+          f"Curriculum={curric_str} | Adaptive={adapt_str}")
     print(f"  alpha={cfg['alpha']} | beta_decay={cfg['beta_decay']} | "
           f"steps={cfg['num_steps']} | group={cfg['group_size']} | "
           f"T={cfg['temperature']} | lr={cfg['lr']}")
@@ -972,9 +1251,16 @@ def run_training(cfg, train_data, eval_data, model_path=None,
     device = next(model.parameters()).device
 
     # Install vision head hooks (persistent during training)
-    hooks = VisionHeadHooks(model, cfg["vision_heads"],
-                            num_heads=16, head_dim=128)
-    print(f"[hooks] Installed on layers {hooks.layers_needed}")
+    use_adaptive = cfg.get("adaptive_heads", False)
+    if use_adaptive:
+        hooks = AdaptiveVisionHeadHooks(model, num_layers=28,
+                                         num_heads=16, head_dim=128)
+        print(f"[hooks] Adaptive mode: ALL 28 layers hooked (448 heads), "
+              f"top-{cfg.get('adaptive_top_k', 12)} selected per sample")
+    else:
+        hooks = VisionHeadHooks(model, cfg["vision_heads"],
+                                num_heads=16, head_dim=128)
+        print(f"[hooks] Fixed mode: installed on layers {hooks.layers_needed}")
 
     optimizer = torch.optim.AdamW(
         [p for p in model.parameters() if p.requires_grad],
@@ -1041,9 +1327,14 @@ def run_training(cfg, train_data, eval_data, model_path=None,
 
         # Rewards + head-level token weights
         try:
-            rewards, details, token_weights_list = compute_rewards_with_head_lsr(
-                model, processor, sample, candidates, cand_ids_list,
-                think_ranges, prompt_len, device, cfg, hooks)
+            if use_adaptive:
+                rewards, details, token_weights_list = compute_rewards_adaptive_head(
+                    model, processor, sample, candidates, cand_ids_list,
+                    think_ranges, prompt_len, device, cfg, hooks)
+            else:
+                rewards, details, token_weights_list = compute_rewards_with_head_lsr(
+                    model, processor, sample, candidates, cand_ids_list,
+                    think_ranges, prompt_len, device, cfg, hooks)
         except torch.cuda.OutOfMemoryError:
             torch.cuda.empty_cache(); gc.collect()
             print(f"  [step {step+1}] OOM reward, skip"); continue
@@ -1066,9 +1357,14 @@ def run_training(cfg, train_data, eval_data, model_path=None,
                             model, processor, alt_sample, cfg["group_size"],
                             cfg["temperature"], cfg["top_p"],
                             cfg["max_new_tokens"], cfg["min_think_tokens"], device)
-                    rewards, details, token_weights_list = compute_rewards_with_head_lsr(
-                        model, processor, alt_sample, candidates, cand_ids_list,
-                        think_ranges, prompt_len, device, cfg, hooks)
+                    if use_adaptive:
+                        rewards, details, token_weights_list = compute_rewards_adaptive_head(
+                            model, processor, alt_sample, candidates, cand_ids_list,
+                            think_ranges, prompt_len, device, cfg, hooks)
+                    else:
+                        rewards, details, token_weights_list = compute_rewards_with_head_lsr(
+                            model, processor, alt_sample, candidates, cand_ids_list,
+                            think_ranges, prompt_len, device, cfg, hooks)
                     sample = alt_sample
                     rarr = np.array(rewards)
                     rstd = rarr.std()
@@ -1134,6 +1430,10 @@ def run_training(cfg, train_data, eval_data, model_path=None,
         if cfg.get("gated_head_lsr"):
             gate_modes = [d.get("gate_mode", "standard") for d in details]
             step_info["gate_mode"] = gate_modes[0] if gate_modes else "standard"
+        # Adaptive head tracking
+        if use_adaptive:
+            top5_heads = details[0].get("selected_heads_top5", []) if details else []
+            step_info["adaptive_top5"] = top5_heads
         # Curriculum tracking
         if curriculum_bins is not None:
             step_info["curriculum_phase"] = get_curriculum_phase(
@@ -1253,6 +1553,12 @@ def main():
                              "head-LSR when zero variance")
     parser.add_argument("--gated-alpha", type=float, default=None,
                         help="Alpha for head-LSR branch (default: same as --alpha)")
+    # Exp8: Adaptive per-rollout head selection
+    parser.add_argument("--adaptive-heads", action="store_true",
+                        help="Exp8: Select top-K heads per sample from ALL 448 "
+                             "heads based on real-vs-black activation delta")
+    parser.add_argument("--adaptive-top-k", type=int, default=12,
+                        help="Number of heads to select per sample (default: 12)")
     # Curriculum by think length
     parser.add_argument("--curriculum", action="store_true",
                         help="Enable think-length curriculum (short→long)")
