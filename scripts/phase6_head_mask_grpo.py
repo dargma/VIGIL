@@ -952,6 +952,47 @@ def normalize_head_scores(scores, eps=1e-6):
     return scores / mean_s
 
 
+def target_calibrated_weight(scores, target_delta, sigma, mode="gaussian"):
+    """Exp13: Target-calibrated token weights.
+
+    Instead of monotonic reward (higher headΔ = better), reward proximity to
+    a target headΔ value calibrated from correct baseline responses.
+
+    Sub-variants:
+      13_1 (gaussian): w = exp(-(Δ-target)² / 2σ²) — symmetric bell curve
+      13_2 (linear):   w = 1 - |Δ-target| / target — linear V-shape, clipped at 0
+      13_3 (asymmetric): gaussian but σ_low=σ, σ_high=2σ — penalize blind more than over-attend
+      13_4 (clipped):  w = 1.0 if |Δ-target| < σ else decay — plateau around target
+    """
+    if scores.numel() == 0:
+        return scores
+    s = scores.float()
+    diff = s - target_delta
+
+    if mode == "gaussian":
+        # 13_1: Symmetric Gaussian centered on target
+        w = torch.exp(-diff**2 / (2 * sigma**2))
+    elif mode == "linear":
+        # 13_2: Linear V-shape, clipped at 0
+        w = torch.clamp(1.0 - torch.abs(diff) / (target_delta + 1e-6), min=0.0)
+    elif mode == "asymmetric":
+        # 13_3: Asymmetric — blind (low Δ) penalized 2x more than over-attending (high Δ)
+        sigma_low = sigma       # tight penalty for being below target
+        sigma_high = sigma * 2  # looser penalty for being above target
+        sig = torch.where(diff < 0, sigma_low, sigma_high)
+        w = torch.exp(-diff**2 / (2 * sig**2))
+    elif mode == "clipped":
+        # 13_4: Plateau around target, then decay
+        # w = 1.0 if |diff| < sigma, else exponential decay
+        inside = (torch.abs(diff) < sigma).float()
+        outside_w = torch.exp(-(torch.abs(diff) - sigma)**2 / (2 * sigma**2))
+        w = inside + (1 - inside) * outside_w
+    else:
+        w = torch.ones_like(s)
+
+    return w
+
+
 def compute_decay_penalty(scores, smooth_window=3):
     """Penalty for head activation decrease during thinking chain."""
     if scores.numel() < 2:
@@ -1331,19 +1372,33 @@ def compute_rewards_soft_weighted(model, processor, sample, candidates,
             alpha_effective = 0.0 if correct_has_variance else cfg.get("gated_alpha", cfg["alpha"])
 
         if head_scores.numel() >= 10 and alpha_effective > 0:
-            norm_scores = normalize_head_scores(head_scores)
-            norm_scores = torch.clamp(norm_scores, 0.0, 5.0)
             t_end_safe = min(t_end, n_tokens)
             t_start_safe = min(t_start, t_end_safe)
-            w_len = min(norm_scores.numel(), t_end_safe - t_start_safe)
-            if w_len > 0:
-                if use_vppo:
-                    mask = (norm_scores[:w_len] >= 1.0).float()
+
+            # Exp13: Target-calibrated token weights
+            target_delta = cfg.get("target_delta", 0.0)
+            target_mode = cfg.get("target_mode", "gaussian")
+            target_sigma = cfg.get("target_sigma", 2.0)
+            if cfg.get("target_calibrated", False) and target_delta > 0:
+                cal_w = target_calibrated_weight(
+                    head_scores, target_delta, target_sigma, mode=target_mode)
+                cal_w = torch.clamp(cal_w, 0.0, 1.0)
+                w_len = min(cal_w.numel(), t_end_safe - t_start_safe)
+                if w_len > 0:
                     token_w[t_start_safe:t_start_safe + w_len] = (
-                        mask * (1.0 + alpha_effective * norm_scores[:w_len]))
-                else:
-                    token_w[t_start_safe:t_start_safe + w_len] = (
-                        1.0 + alpha_effective * norm_scores[:w_len])
+                        1.0 + alpha_effective * cal_w[:w_len])
+            else:
+                norm_scores = normalize_head_scores(head_scores)
+                norm_scores = torch.clamp(norm_scores, 0.0, 5.0)
+                w_len = min(norm_scores.numel(), t_end_safe - t_start_safe)
+                if w_len > 0:
+                    if use_vppo:
+                        mask = (norm_scores[:w_len] >= 1.0).float()
+                        token_w[t_start_safe:t_start_safe + w_len] = (
+                            mask * (1.0 + alpha_effective * norm_scores[:w_len]))
+                    else:
+                        token_w[t_start_safe:t_start_safe + w_len] = (
+                            1.0 + alpha_effective * norm_scores[:w_len])
 
         gate_mode = "standard"
         if use_gated:
@@ -1929,6 +1984,36 @@ def run_training(cfg, train_data, eval_data, model_path=None,
     pre_blind = {"gap": 0, "real_acc": 0, "blind_acc": 0, "total": 0}
     pre_mme = None
     print(f"  POPE: {pre_pope['acc']:.1%} (quick pre-eval)")
+
+    # Exp13: Auto-calibrate target_delta from baseline headΔ
+    if cfg.get("target_calibrated", False) and cfg.get("target_delta", 0.0) <= 0:
+        print("  [exp13] Auto-calibrating target_delta from 10 baseline samples...")
+        model.eval()
+        cal_deltas = []
+        for ci in range(min(10, len(train_data))):
+            try:
+                s = train_data[ci]
+                cands, cids, tranges = generate_candidates(
+                    model, processor, s, 1, cfg["temperature"], cfg["top_p"],
+                    256, 50, device, tokenizer=tokenizer)
+                if cids and len(cids) > 0:
+                    hs, ms, tl, hw = compute_soft_weighted_head_lsr(
+                        model, processor, s, cids[0], tranges[0], device, hooks,
+                        temperature=cfg.get("soft_temperature", "auto"),
+                        temp_scale=cfg.get("soft_temperature_scale", 1.0))
+                    if hs.numel() > 0:
+                        cal_deltas.append(hs.mean().item())
+            except Exception:
+                pass
+        if cal_deltas:
+            cfg["target_delta"] = float(np.mean(cal_deltas))
+            print(f"  [exp13] target_delta = {cfg['target_delta']:.3f} "
+                  f"(from {len(cal_deltas)} samples, range {min(cal_deltas):.2f}-{max(cal_deltas):.2f})")
+        else:
+            cfg["target_delta"] = 8.0  # fallback
+            print(f"  [exp13] fallback target_delta = 8.0")
+        model.train()
+
     eval_at = cfg.get('eval_steps_list', []) or f"every {cfg['eval_every']}"
     print(f"  Full eval (POPE={n_pope}, Blind={n_blind}, TextVQA={n_tvqa}, MME={n_mme}) at steps: {eval_at}")
 
@@ -2318,6 +2403,17 @@ def main():
                         help="Exp11: Layer-aware weighting (decision 2×, feature 1.5×)")
     parser.add_argument("--top-p-heads", type=float, default=0.0,
                         help="Exp12: Top-P head selection (0.9 keeps top 90%% weight)")
+    # Exp13: Target-Calibrated Vision Head Reward
+    parser.add_argument("--target-calibrated", action="store_true",
+                        help="Exp13: Target-calibrated headΔ reward (penalizes deviation from target)")
+    parser.add_argument("--target-delta", type=float, default=0.0,
+                        help="Exp13: Target headΔ value (0=auto-calibrate from pre-eval)")
+    parser.add_argument("--target-sigma", type=float, default=2.0,
+                        help="Exp13: Gaussian sigma for target reward")
+    parser.add_argument("--target-mode", type=str, default="gaussian",
+                        choices=["gaussian", "linear", "asymmetric", "clipped"],
+                        help="Exp13 sub-variants: gaussian(13_1), linear(13_2), "
+                             "asymmetric(13_3), clipped(13_4)")
     # Curriculum by think length
     parser.add_argument("--curriculum", action="store_true",
                         help="Enable think-length curriculum (short→long)")
@@ -2379,6 +2475,12 @@ def main():
     # Eval steps
     es = cfg.pop("eval_steps", "")
     cfg["eval_steps_list"] = [int(x) for x in es.split(",") if x.strip()] if es else []
+
+    # Exp13: Target-calibrated
+    cfg["target_calibrated"] = cfg.pop("target_calibrated", False)
+    cfg["target_delta"] = cfg.pop("target_delta", 0.0)
+    cfg["target_sigma"] = cfg.pop("target_sigma", 2.0)
+    cfg["target_mode"] = cfg.pop("target_mode", "gaussian")
 
     # Curriculum
     cfg["curriculum"] = cfg.pop("curriculum", False)
