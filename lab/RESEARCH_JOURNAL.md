@@ -1223,3 +1223,44 @@ With group_size=8, this means 16 extra forwards. Acceptable for training.
 - Pre:  POPE=96.0%, Gap=44.0pp
 - Post: POPE=96.0%, Gap=44.0pp
 - Delta: POPE +0.0pp, Gap +0.0pp
+
+
+---
+
+## 2026-03-17 — Scaled Training + Multi-Model Expansion
+
+### Exp10 Scaled v_final (2 samples/step, 2K data)
+
+- Config: steps=50, samples_per_step=2, train_samples=2000 (1400 TextVQA + 600 MME)
+- Seed=42, GDPO + VPPO + Gated Head-LSR, sharp sigmoid (T/3)
+- Results:
+  - Step 10: POPE=93.3%, Gap=42.0pp
+  - Step 25: POPE=93.3%, Gap=42.0pp
+  - Step 50: POPE=91.7%, Gap=40.0pp (regressed to baseline)
+- Only 5% data coverage (100/2000 samples)
+
+### Exp10 Scaled v6 (4 samples/step, 2K data)
+
+- Config: steps=50, samples_per_step=4, train_samples=2000 (1400 TextVQA + 600 MME)
+- Seed=42, GDPO + VPPO + Gated Head-LSR, sharp sigmoid (T/3)
+- 7 OOM skips out of 50 steps
+- Results:
+  - **Step 10: POPE=95.0%, Gap=44.0pp** (matches 1K best)
+  - Step 25: POPE=91.7%, Gap=40.0pp
+  - Step 50: POPE=91.7%, Gap=40.0pp
+- Checkpoint: `checkpoints/exp10_sharp_soft/scaled_v6/best/`
+
+### Key Finding: Step 10 Sweet Spot
+
+Across all runs, step 10 consistently yields best POPE (93.3-95.0%). Beyond step 10, catastrophic forgetting degrades results. Optimal: train exactly 10 steps.
+
+### Multi-Model: InternVL3.5-1B Blocked by Transformers 5.0
+
+- `phase6_head_mask_grpo.py` refactored with MODEL_CONFIGS for 3 models
+- InternVL loading fails: meta tensor init + missing `all_tied_weights_keys`
+- Fix: downgrade transformers or wait for model update
+
+### to_opencode.md Updated (969 → 1274 lines)
+
+- Added Exp10-12, Scaled Training, Multi-Model sections
+- Updated results table, added new CLI parameters

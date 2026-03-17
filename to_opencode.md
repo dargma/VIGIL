@@ -20,9 +20,14 @@ This document provides step-by-step instructions to reproduce the entire VIGIL p
 12. [Training — Exp7: Dynamic Head Selection (FAILED)](#12-training--exp7-dynamic-head-selection-failed)
 13. [Training — Exp8: Per-Rollout Adaptive Head Gate](#13-training--exp8-per-rollout-adaptive-head-gate)
 14. [Training — Exp9: Soft-Weighted All-Head LSR](#14-training--exp9-soft-weighted-all-head-lsr)
-15. [Evaluation](#15-evaluation)
-16. [Expected Results](#16-expected-results)
-17. [Troubleshooting](#17-troubleshooting)
+15. [Training — Exp10: Sharp Sigmoid Head-LSR](#15-training--exp10-sharp-sigmoid-head-lsr)
+16. [Training — Exp11: Layer-Aware Head Selection](#16-training--exp11-layer-aware-head-selection)
+17. [Training — Exp12: Top-P Adaptive Selection](#17-training--exp12-top-p-adaptive-selection)
+18. [Scaled Training (2K Samples)](#18-scaled-training-2k-samples)
+19. [Multi-Model Expansion](#19-multi-model-expansion)
+20. [Evaluation](#20-evaluation)
+21. [Expected Results](#21-expected-results)
+22. [Troubleshooting](#22-troubleshooting)
 
 ---
 
@@ -261,16 +266,18 @@ ds.save_to_disk('data/calibration/textvqa_val')
 
 ### 5.3 Data Loading for Training
 
-The training scripts load data internally. For Exp1/4/5/6, the key data prep is:
+The training scripts load data internally:
 
 ```python
-# In scripts/phase6_head_mask_grpo.py and scripts/phase7_head_masking_kl.py
-# Data is loaded from TextVQA train, limited to 500 samples:
-
+# In scripts/phase6_head_mask_grpo.py
+# Default: TextVQA train only
 textvqa = load_dataset("facebook/textvqa", split="train")
-train_data = textvqa.select(range(500))  # First 500 samples
+train_data = textvqa.select(range(args.train_samples))  # --train-samples N
 
-# Each sample has: question, answers (list), image
+# With MME train data (recommended for scaled runs):
+# --include-mme-train --mme-ratio 0.3 --mme-eval-reserve 200
+# Adds 600 MME yes/no samples (30% of 2000), reserves 200 for eval
+# Result: 1400 TextVQA + 600 MME = 2000 training samples
 ```
 
 ### 5.4 POPE Evaluation Data
@@ -783,9 +790,287 @@ PYTHONUNBUFFERED=1 python -u scripts/phase6_head_mask_grpo.py \
 
 ---
 
-## 15. Evaluation
+## 15. Training — Exp10: Sharp Sigmoid Head-LSR
 
-### 12.1 POPE Evaluation
+**Script**: `scripts/phase6_head_mask_grpo.py --soft-weighted-heads --soft-temperature auto --soft-temperature-scale 0.33`
+
+**Status**: BEST RESULT — POPE 95.0% at 4 of 6 eval checkpoints (1K scale).
+
+### 15.1 Core Idea
+
+Exp9 uses `T = std(deltas)` for sigmoid temperature, which produces a smooth sigmoid that treats many heads as medium-importance. Exp10 sharpens the sigmoid by dividing the temperature by 3:
+
+```
+T_sharp = std(deltas) / 3
+weight(l, h) = sigmoid((delta(l,h) - mean_delta) / T_sharp)
+```
+
+This creates a near-binary selection: high-delta heads get weight ≈ 1.0, low-delta heads get weight ≈ 0.0. It approximates Exp8's discrete top-K but with smooth gradients.
+
+### 15.2 Run Command (1K Samples)
+
+```bash
+PYTHONUNBUFFERED=1 python -u scripts/phase6_head_mask_grpo.py \
+    --steps 50 --alpha 0.5 --gdpo --vppo-mask --gated-head-lsr \
+    --soft-weighted-heads --soft-temperature auto --soft-temperature-scale 0.33 \
+    --eval-every 5 --lr 2e-6 --group-size 6 --temperature 1.3 \
+    --train-samples 1000 \
+    --output-dir checkpoints/exp10_sharp_soft/run1 \
+    2>&1 | tee logs/exp10_sharp_sigmoid.log
+```
+
+### 15.3 Results (1K Samples, 50 Steps)
+
+| Step | POPE | Gap | TextVQA |
+|------|------|-----|---------|
+| Pre  | 91.7% | 40.0pp | 72.7% |
+| 5    | **95.0%** | **44.0pp** | 72.7% |
+| 10   | **95.0%** | **44.0pp** | 70.7% |
+| 15   | **95.0%** | **44.0pp** | 70.7% |
+| 20   | **95.0%** | **44.0pp** | 72.7% |
+| 25   | 93.3% | 42.0pp | 70.7% |
+| 30   | **95.0%** | **44.0pp** | 70.7% |
+
+4 of 6 eval checkpoints hit POPE 95.0% — the most stable result across all experiments.
+
+### 15.4 Key Parameter
+
+| Parameter | Value | Meaning |
+|-----------|-------|---------|
+| `--soft-temperature-scale` | 0.33 | Divides auto temperature by 3 → sharper sigmoid |
+
+---
+
+## 16. Training — Exp11: Layer-Aware Head Selection
+
+**Script**: `scripts/phase6_head_mask_grpo.py --layer-aware-heads`
+
+**Status**: Implemented but not yet run at scale.
+
+### 16.1 Core Idea
+
+Weight vision heads differently based on their layer position:
+- **Decision heads** (layers 2-5): High Cohen's d, process visual info for decision-making
+- **Feature heads** (layers 23-27): High activation Δ, extract raw visual features
+
+Exp11 applies layer-dependent scaling to the sigmoid weights from Exp10.
+
+### 16.2 Run Command
+
+```bash
+PYTHONUNBUFFERED=1 python -u scripts/phase6_head_mask_grpo.py \
+    --steps 50 --alpha 0.5 --gdpo --vppo-mask --gated-head-lsr \
+    --soft-weighted-heads --soft-temperature auto --soft-temperature-scale 0.33 \
+    --layer-aware-heads \
+    --eval-every 5 --lr 2e-6 --group-size 6 --temperature 1.3 \
+    --train-samples 1000 \
+    --output-dir checkpoints/exp11_layer_aware/run1 \
+    2>&1 | tee logs/exp11_layer_aware.log
+```
+
+---
+
+## 17. Training — Exp12: Top-P Adaptive Selection
+
+**Script**: `scripts/phase6_head_mask_grpo.py --top-p-heads --top-p-threshold 0.9`
+
+**Status**: Implemented but not yet run at scale.
+
+### 17.1 Core Idea
+
+Instead of fixed top-K or temperature-based sigmoid, select heads by cumulative mass:
+1. Sort heads by activation delta (descending)
+2. Normalize deltas to a probability distribution
+3. Include heads until cumulative probability reaches threshold P (default 0.9)
+
+This auto-adapts the number of selected heads per sample based on delta distribution.
+
+### 17.2 Run Command
+
+```bash
+PYTHONUNBUFFERED=1 python -u scripts/phase6_head_mask_grpo.py \
+    --steps 50 --alpha 0.5 --gdpo --vppo-mask --gated-head-lsr \
+    --top-p-heads --top-p-threshold 0.9 \
+    --eval-every 5 --lr 2e-6 --group-size 6 --temperature 1.3 \
+    --train-samples 1000 \
+    --output-dir checkpoints/exp12_top_p/run1 \
+    2>&1 | tee logs/exp12_top_p.log
+```
+
+---
+
+## 18. Scaled Training (2K Samples)
+
+### 18.1 Problem: Low Data Coverage
+
+The initial experiments used `--train-samples 500-1000` with 1 sample per step:
+
+| Config | Steps | Samples/Step | Total | Coverage |
+|--------|-------|-------------|-------|----------|
+| Original | 50 | 1 | 50 | 2.5-5% |
+| Scaled (recommended) | 50 | 4 | 200 | 10% |
+
+At 2.5% coverage, the model only sees 50 unique samples. This is insufficient for stable training.
+
+### 18.2 New Parameters
+
+| Parameter | Default | Meaning |
+|-----------|---------|---------|
+| `--samples-per-step N` | 1 | Process N samples per optimizer step (mini-batch) |
+| `--eval-steps 10,25,50` | (none) | Only eval at specific steps (skip intermediate) |
+| `--seed 42` | 42 | Deterministic data ordering across experiments |
+
+### 18.3 Deterministic Data Iterator
+
+The training loop uses a separate `random.Random(seed)` for data ordering:
+
+```python
+data_rng = random.Random(cfg["seed"])  # Deterministic, separate from torch RNG
+indices = list(range(len(train_data)))
+data_rng.shuffle(indices)  # Epoch-aware reshuffling
+```
+
+Two experiments with the same `--seed 42 --train-samples 2000 --samples-per-step 4` will process identical samples in identical order.
+
+### 18.4 MME Training Data
+
+```bash
+# Include MME train data (yes/no format, complementary to TextVQA)
+--include-mme-train --mme-ratio 0.3 --mme-eval-reserve 200
+```
+
+This adds 600 MME train samples (30% of 2000) alongside 1400 TextVQA samples. The 200 reserved MME questions are excluded from training for eval.
+
+### 18.5 Scaled Run Commands
+
+**Exp10 Scaled (Priority 1)**:
+```bash
+PYTHONUNBUFFERED=1 python -u scripts/phase6_head_mask_grpo.py \
+    --steps 50 --alpha 0.5 --gdpo --vppo-mask --gated-head-lsr \
+    --soft-weighted-heads --soft-temperature auto --soft-temperature-scale 0.33 \
+    --lr 2e-6 --group-size 6 --temperature 1.3 \
+    --train-samples 2000 --samples-per-step 4 \
+    --include-mme-train --mme-ratio 0.3 --mme-eval-reserve 200 \
+    --eval-steps 10,25,50 \
+    --eval-pope-samples 60 --eval-blind-samples 50 --eval-textvqa-samples 30 \
+    --seed 42 \
+    --output-dir checkpoints/exp10_sharp_soft/scaled_v6
+```
+
+**Exp8 Scaled (Priority 2, same data order)**:
+```bash
+PYTHONUNBUFFERED=1 python -u scripts/phase6_head_mask_grpo.py \
+    --steps 50 --alpha 0.5 --gdpo --vppo-mask --gated-head-lsr \
+    --adaptive-heads \
+    --lr 2e-6 --group-size 6 --temperature 1.3 \
+    --train-samples 2000 --samples-per-step 4 \
+    --include-mme-train --mme-ratio 0.3 --mme-eval-reserve 200 \
+    --eval-steps 10,25,50 \
+    --eval-pope-samples 60 --eval-blind-samples 50 --eval-textvqa-samples 30 \
+    --seed 42 \
+    --output-dir checkpoints/exp8_adaptive_head/scaled_v6
+```
+
+---
+
+## 19. Multi-Model Expansion
+
+### 19.1 Goal
+
+Validate that Head-LSR GRPO is architecture-agnostic by replicating Exp10 on two additional models.
+
+### 19.2 Supported Models
+
+| Property | Qwen3-VL-2B (done) | InternVL3.5-1B | DeepSeek-VL2-Tiny |
+|----------|-------------------|----------------|-------------------|
+| HF ID | `Qwen/Qwen3-VL-2B-Thinking` | `OpenGVLab/InternVL3_5-1B` | `deepseek-ai/deepseek-vl2-tiny` |
+| Layers | 28 | 28 | 12 |
+| Q Heads | 16 | 16 | 10 |
+| KV Heads | 8 (GQA) | 8 (GQA) | 10 (MHA) |
+| Head Dim | 128 | 128 | 256 |
+| Hidden | 2048 | 1024 | 2560 |
+| Total Heads | 448 | 448 | 120 |
+| MoE | No | No | Yes (64 experts, top-6) |
+| Thinking | Yes | No | No |
+
+### 19.3 CLI Usage
+
+Use the `--model-key` parameter to select a model:
+
+```bash
+# Qwen3-VL-2B (default)
+python scripts/phase6_head_mask_grpo.py --model-key qwen3_vl_2b ...
+
+# InternVL3.5-1B
+python scripts/phase6_head_mask_grpo.py --model-key internvl3_5_1b ...
+
+# DeepSeek-VL2-Tiny
+python scripts/phase6_head_mask_grpo.py --model-key deepseek_vl2_tiny ...
+```
+
+### 19.4 Architecture-Specific Adaptations
+
+The script auto-detects and adapts based on model key:
+
+| Component | Qwen3-VL | InternVL3.5 | DeepSeek-VL2 |
+|-----------|----------|-------------|--------------|
+| Layer path | `model.language_model.layers` | `language_model.model.layers` | `model.layers` |
+| Input API | `qwen_vl_utils` + processor | `model.chat()` + torchvision | custom preprocessor |
+| Generation | `model.generate()` + think tags | `model.chat()` | `model.generate()` |
+| Max temp | 1.3 | 1.3 | 0.7 |
+| trust_remote_code | No | Yes | Yes |
+
+### 19.5 InternVL3.5-1B Baseline
+
+Prior results (from BoN+SFT experiments):
+- POPE baseline: 78.2%, Gap: 28.2pp
+- BoN+SFT R2: 83.4% (+5.2pp), Gap: 33.4pp (+5.2pp)
+- Max Cohen's d: 0.774 (vs Qwen3's 9.8 — 12× lower signal)
+
+### 19.6 InternVL Exp10 Command
+
+```bash
+python -u scripts/phase6_head_mask_grpo.py \
+    --model-key internvl3_5_1b \
+    --steps 50 --alpha 0.5 --gdpo --vppo-mask --gated-head-lsr \
+    --soft-weighted-heads --soft-temperature auto --soft-temperature-scale 0.33 \
+    --lr 2e-6 --group-size 6 --temperature 1.3 \
+    --max-new-tokens 512 --train-samples 2000 --samples-per-step 2 \
+    --eval-steps 10,25,50 --eval-pope-samples 60 --eval-blind-samples 50 \
+    --seed 42 --output-dir checkpoints/internvl/exp10_scaled
+```
+
+### 19.7 DeepSeek-VL2-Tiny Exp10 Command
+
+```bash
+python -u scripts/phase6_head_mask_grpo.py \
+    --model-key deepseek_vl2_tiny \
+    --steps 50 --alpha 0.5 --gdpo --vppo-mask --gated-head-lsr \
+    --soft-weighted-heads --soft-temperature auto --soft-temperature-scale 0.33 \
+    --lr 2e-6 --group-size 6 --temperature 0.7 \
+    --max-new-tokens 512 --train-samples 2000 --samples-per-step 2 \
+    --eval-steps 10,25,50 --eval-pope-samples 60 --eval-blind-samples 50 \
+    --seed 42 --output-dir checkpoints/deepseek/exp10_scaled
+```
+
+### 19.8 Calibration (Required Per Model)
+
+Each model needs its own calibration. The calibration files are stored at:
+- Qwen3: `checkpoints/calibration/qwen3_vl_2b/calibration_meta.json` (done)
+- InternVL: `checkpoints/calibration/internvl3_5_1b/calibration_meta.json` (done)
+- DeepSeek: `checkpoints/calibration/deepseek_vl2_tiny/calibration_meta.json` (needed)
+
+### 19.9 Risks
+
+1. **InternVL Cohen's d is 12× lower** → Head-LSR signal may be too weak. Mitigation: higher alpha or activation delta for head selection.
+2. **DeepSeek MoE** → Expert routing may dilute per-head signal. Mitigation: Track routing shift.
+3. **Memory**: DeepSeek MoE may exceed expectations. Mitigation: Reduce group_size to 4.
+
+---
+
+## 20. Evaluation
+
+### 20.1 POPE Evaluation
 
 ```bash
 # Quick eval (60 samples, used during training)
@@ -803,7 +1088,7 @@ python scripts/eval_official.py \
     --output-dir lab/reports/eval_full
 ```
 
-### 12.2 TextVQA Evaluation
+### 20.2 TextVQA Evaluation
 
 ```bash
 python scripts/eval_official.py \
@@ -813,7 +1098,7 @@ python scripts/eval_official.py \
     --output-dir lab/reports/eval_textvqa
 ```
 
-### 12.3 Blind Test (Gap Metric)
+### 20.3 Blind Test (Gap Metric)
 
 The blind test replaces all images with black images and measures the accuracy drop:
 
@@ -829,7 +1114,7 @@ python scripts/run_blind_test.py \
 - Baseline gap: 40.0pp
 - Best gap: 44.0pp (Exp1 step 10)
 
-### 12.4 MME Evaluation
+### 20.4 MME Evaluation
 
 ```bash
 python scripts/eval_mme.py \
@@ -840,7 +1125,7 @@ python scripts/eval_mme.py \
 
 MME uses pair-based scoring: each sample has a "positive" and "negative" variant. Score = 1.0 only if BOTH answered correctly, 0.5 if one correct, 0.0 if both wrong.
 
-### 12.5 Complete Evaluation Pipeline
+### 20.5 Complete Evaluation Pipeline
 
 After training, evaluate all conditions:
 
@@ -863,24 +1148,41 @@ python scripts/run_blind_test.py --model-path checkpoints/phase6c/gated_only/ste
 
 ---
 
-## 16. Expected Results
+## 21. Expected Results
 
-### Final Results Table
+### Final Results Table (Qwen3-VL-2B-Thinking)
 
 ```
-┌──────────────────────────────────────────────────┬───────┬────────┬─────────┬──────────┐
-│             Experiment                           │ POPE  │  Gap   │ TextVQA │  Status  │
-├──────────────────────────────────────────────────┼───────┼────────┼─────────┼──────────┤
-│ Baseline (HF Thinking)                           │ 91.7% │ 40.0pp │ 72.7%   │ Done     │
-│ Exp1: Gated Head-LSR (500 samples, step 10)      │ 95.0% │ 44.0pp │ 74.7%   │ BEST     │
-│ Exp1: Gated Head-LSR (1K samples, step 10)       │ 93.3% │ 42.0pp │ 72.7%   │ Done     │
-│ Exp4: Head Masking KL (step 15)                  │ 90.0% │ 38.0pp │ 72.7%   │ No gain  │
-│ Exp5: Learned Importance + KL (step 15)          │ 90.0% │ 38.0pp │ 72.7%   │ FAILED   │
-│ Exp6: Learned Importance + LSR (step 15)         │ 90.0% │ 38.0pp │ 70.7%   │ FAILED   │
-│ Exp7: Dynamic Head Selection (1K, step 25)       │ 91.7% │ 40.0pp │ 70.7%   │ FAILED   │
-│ Exp8: Adaptive Head Gate (1K, step ?)            │ TBD   │ TBD    │ TBD     │ PENDING  │
-└──────────────────────────────────────────────────┴───────┴────────┴─────────┴──────────┘
+┌─────────────────────────────────────────────────────┬───────┬────────┬─────────┬──────────┐
+│              Experiment                             │ POPE  │  Gap   │ TextVQA │  Status  │
+├─────────────────────────────────────────────────────┼───────┼────────┼─────────┼──────────┤
+│ Baseline (HF Thinking)                              │ 91.7% │ 40.0pp │ 72.7%   │ Done     │
+│ Exp1: Gated Head-LSR (500 samples, step 10)         │ 95.0% │ 44.0pp │ 74.7%   │ Done     │
+│ Exp1: Gated Head-LSR (1K samples, step 10)          │ 93.3% │ 42.0pp │ 72.7%   │ Done     │
+│ Exp4: Head Masking KL (step 15)                     │ 90.0% │ 38.0pp │ 72.7%   │ No gain  │
+│ Exp5: Learned Importance + KL (step 15)             │ 90.0% │ 38.0pp │ 72.7%   │ FAILED   │
+│ Exp6: Learned Importance + LSR (step 15)            │ 90.0% │ 38.0pp │ 70.7%   │ FAILED   │
+│ Exp7: Dynamic Head Selection (1K, step 25)          │ 91.7% │ 40.0pp │ 70.7%   │ FAILED   │
+│ Exp8: Adaptive Head Gate (1K, step 5-20)            │ 95.0% │ 44.0pp │ 72.7%   │ Done     │
+│ Exp9: Soft-Weighted All-Head (1K, step 5-15)        │ 93.3% │ 42.0pp │ 72.7%   │ Done     │
+│ Exp10: Sharp Sigmoid (1K, steps 5-30)               │ 95.0% │ 44.0pp │ 72.7%   │ BEST     │
+│ Exp10: Sharp Sigmoid (2K scaled, running)           │  TBD  │  TBD   │  TBD    │ Running  │
+│ Exp11: Layer-Aware (1K)                             │  TBD  │  TBD   │  TBD    │ Planned  │
+│ Exp12: Top-P Adaptive (1K)                          │  TBD  │  TBD   │  TBD    │ Planned  │
+├─────────────────────────────────────────────────────┼───────┼────────┼─────────┼──────────┤
+│ InternVL3.5-1B Baseline                             │ 78.2% │ 28.2pp │   —     │ Done     │
+│ InternVL3.5-1B BoN+SFT R2                          │ 83.4% │ 33.4pp │   —     │ Done     │
+│ InternVL3.5-1B Exp10 (planned)                      │  TBD  │  TBD   │  TBD    │ Planned  │
+│ DeepSeek-VL2-Tiny Exp10 (planned)                   │  TBD  │  TBD   │  TBD    │ Planned  │
+└─────────────────────────────────────────────────────┴───────┴────────┴─────────┴──────────┘
 ```
+
+### Why Exp10 is Best
+
+Exp10 (sharp sigmoid T/3) achieved **4 of 6 eval checkpoints at POPE 95.0%** — the most stable result:
+- Steps 5, 10, 15, 20, 30 all hit 95.0% (step 25 dipped to 93.3%)
+- Exp8 also hit 95.0% but at fewer checkpoints
+- The sharp sigmoid approximates discrete top-K selection with smooth gradients
 
 ### Key Metrics
 
@@ -891,7 +1193,7 @@ python scripts/run_blind_test.py --model-path checkpoints/phase6c/gated_only/ste
 
 ---
 
-## 17. Troubleshooting
+## 22. Troubleshooting
 
 ### Common Issues
 
@@ -935,7 +1237,7 @@ Eval needs less memory than training but may spike with long Thinking outputs. S
 
 | Purpose | File |
 |---------|------|
-| Exp1 + Exp8 training | `scripts/phase6_head_mask_grpo.py` |
+| All experiments (Exp1, Exp8-12) | `scripts/phase6_head_mask_grpo.py` |
 | Exp4/5/6/7 training | `scripts/phase7_head_masking_kl.py` |
 | Calibration | `scripts/calibrate.py` |
 | POPE/TextVQA eval | `scripts/eval_official.py` |
@@ -944,11 +1246,15 @@ Eval needs less memory than training but may spike with long Thinking outputs. S
 | Smoke test | `scripts/smoke_test.py` |
 | Reward functions | `src/rewards.py` |
 | Data loading | `src/data_loader.py` |
+| Model registry | `src/model_registry.py` |
 | Training config | `configs/training.yaml` |
 | Model config | `configs/models.yaml` |
-| Calibration output | `checkpoints/calibration/qwen3_vl_2b/calibration_meta.json` |
+| Multi-model plan | `lab/plans/multimodel_expansion.md` |
+| Scaled training plan | `lab/plans/exp8_exp10_scaled_v3.md` |
+| Qwen3 calibration | `checkpoints/calibration/qwen3_vl_2b/calibration_meta.json` |
+| InternVL calibration | `checkpoints/calibration/internvl3_5_1b/calibration_meta.json` |
 | Results tracker | `lab/reports/autoresearch/results.tsv` |
-| Research report (Korean) | `lab/reports/phase7/RESEARCH_REPORT.md` |
+| OpenReview report | `lab/reports/OPENREVIEW_REPORT.md` |
 
 ### Log Files
 

@@ -28,9 +28,57 @@ from collections import defaultdict, Counter
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-HF_ID = "Qwen/Qwen3-VL-2B-Thinking"
 POPE_SPLITS = ["random", "popular", "adversarial"]
 PROJECT_ROOT = Path(__file__).parent.parent
+
+# ══════════════════════════════════════════════════════════════════════
+#  Multi-Model Configuration
+# ══════════════════════════════════════════════════════════════════════
+
+MODEL_CONFIGS = {
+    "qwen3_vl_2b": {
+        "hf_id": "Qwen/Qwen3-VL-2B-Thinking",
+        "model_class": "Qwen3VLForConditionalGeneration",
+        "processor_class": "AutoProcessor",
+        "num_layers": 28, "num_heads": 16, "num_kv_heads": 8, "head_dim": 128,
+        "hidden_size": 2048, "gqa": True,
+        "layer_path": "model.language_model.layers",
+        "input_api": "qwen_vl",  # uses qwen_vl_utils
+        "thinking": True,
+        "trust_remote_code": True,
+        "calibration_file": "checkpoints/calibration/qwen3_vl_2b/calibration_meta.json",
+    },
+    "internvl3_5_1b": {
+        "hf_id": "OpenGVLab/InternVL3_5-1B",
+        "model_class": "AutoModel",
+        "processor_class": None,  # uses tokenizer + TRANSFORM
+        "num_layers": 28, "num_heads": 16, "num_kv_heads": 8, "head_dim": 128,
+        "hidden_size": 1024, "gqa": True,
+        "layer_path": "language_model.model.layers",
+        "input_api": "internvl",  # uses model.chat()
+        "thinking": False,
+        "trust_remote_code": True,
+        "calibration_file": "checkpoints/calibration/internvl3_5_1b/calibration_meta.json",
+    },
+    "deepseek_vl2_tiny": {
+        "hf_id": "deepseek-ai/deepseek-vl2-tiny",
+        "model_class": "AutoModelForCausalLM",
+        "processor_class": None,
+        "num_layers": 12, "num_heads": 10, "num_kv_heads": 10, "head_dim": 256,
+        "hidden_size": 2560, "gqa": False,
+        "layer_path": "model.layers",
+        "input_api": "deepseek_vl2",
+        "thinking": False,
+        "trust_remote_code": True,
+        "max_temperature": 0.7,
+        "calibration_file": "checkpoints/calibration/deepseek_vl2_tiny/calibration_meta.json",
+    },
+}
+
+# Default (backwards compat)
+HF_ID = MODEL_CONFIGS["qwen3_vl_2b"]["hf_id"]
+ACTIVE_MODEL_KEY = "qwen3_vl_2b"
+ACTIVE_MODEL_CFG = MODEL_CONFIGS["qwen3_vl_2b"]
 
 # Default vision heads from calibration (top-K by Cohen's d)
 # Format: (layer_idx, head_idx, cohen_d)
@@ -243,67 +291,176 @@ def load_pope_eval(max_samples=300):
 #  Model Loading
 # ══════════════════════════════════════════════════════════════════════
 
-def load_model(model_path=None, for_training=True):
-    from transformers import Qwen3VLForConditionalGeneration, AutoProcessor
-    path = model_path or HF_ID
-    print(f"[model] Loading {path} (full finetune, bfloat16)...")
-    model = Qwen3VLForConditionalGeneration.from_pretrained(
-        path, torch_dtype=torch.bfloat16, device_map="auto",
-        trust_remote_code=True)
-    processor = AutoProcessor.from_pretrained(HF_ID, trust_remote_code=True)
+def load_model(model_path=None, for_training=True, model_key=None):
+    global ACTIVE_MODEL_KEY, ACTIVE_MODEL_CFG, HF_ID
+    mcfg = MODEL_CONFIGS.get(model_key or ACTIVE_MODEL_KEY)
+    ACTIVE_MODEL_KEY = model_key or ACTIVE_MODEL_KEY
+    ACTIVE_MODEL_CFG = mcfg
+    HF_ID = mcfg["hf_id"]
+
+    path = model_path or mcfg["hf_id"]
+    api = mcfg["input_api"]
+    print(f"[model] Loading {path} ({ACTIVE_MODEL_KEY}, full finetune, bfloat16)...")
+
+    if api == "qwen_vl":
+        from transformers import Qwen3VLForConditionalGeneration, AutoProcessor
+        model = Qwen3VLForConditionalGeneration.from_pretrained(
+            path, torch_dtype=torch.bfloat16, device_map="auto",
+            trust_remote_code=True)
+        processor = AutoProcessor.from_pretrained(mcfg["hf_id"], trust_remote_code=True)
+        tokenizer = processor.tokenizer
+    elif api == "internvl":
+        from transformers import AutoModel, AutoTokenizer
+        model = AutoModel.from_pretrained(
+            path, torch_dtype=torch.bfloat16,
+            trust_remote_code=True).cuda().eval()
+        tokenizer = AutoTokenizer.from_pretrained(mcfg["hf_id"], trust_remote_code=True)
+        processor = None
+    elif api == "deepseek_vl2":
+        from transformers import AutoModelForCausalLM, AutoTokenizer
+        model = AutoModelForCausalLM.from_pretrained(
+            path, torch_dtype=torch.bfloat16, device_map="auto",
+            trust_remote_code=True)
+        tokenizer = AutoTokenizer.from_pretrained(mcfg["hf_id"], trust_remote_code=True)
+        processor = None
+    else:
+        raise ValueError(f"Unknown input_api: {api}")
+
     if for_training:
         model.train()
-        model.gradient_checkpointing_enable()
+        if hasattr(model, 'gradient_checkpointing_enable'):
+            model.gradient_checkpointing_enable()
         for p in model.parameters(): p.requires_grad = True
         trainable = sum(p.numel() for p in model.parameters() if p.requires_grad)
         print(f"  Trainable: {trainable:,} params, gradient checkpointing ON")
-    return model, processor, processor.tokenizer
+    return model, processor, tokenizer
 
 
 # ══════════════════════════════════════════════════════════════════════
 #  Input Preparation & Generation
 # ══════════════════════════════════════════════════════════════════════
 
-def prepare_inputs(processor, image, question, device):
-    from qwen_vl_utils import process_vision_info
-    content = [{"type": "image", "image": image},
-               {"type": "text", "text": question}]
-    messages = [{"role": "user", "content": content}]
-    text = processor.apply_chat_template(
-        messages, tokenize=False, add_generation_prompt=True,
-        enable_thinking=True)
-    imgs, _, _ = process_vision_info(messages, return_video_kwargs=True)
-    inputs = processor(text=[text], images=imgs, return_tensors="pt", padding=True)
-    return {k: v.to(device) for k, v in inputs.items()}
+def prepare_inputs(processor, image, question, device, tokenizer=None):
+    api = ACTIVE_MODEL_CFG["input_api"]
+
+    if api == "qwen_vl":
+        from qwen_vl_utils import process_vision_info
+        content = [{"type": "image", "image": image},
+                   {"type": "text", "text": question}]
+        messages = [{"role": "user", "content": content}]
+        text = processor.apply_chat_template(
+            messages, tokenize=False, add_generation_prompt=True,
+            enable_thinking=ACTIVE_MODEL_CFG.get("thinking", False))
+        imgs, _, _ = process_vision_info(messages, return_video_kwargs=True)
+        inputs = processor(text=[text], images=imgs, return_tensors="pt", padding=True)
+        return {k: v.to(device) for k, v in inputs.items()}
+
+    elif api == "internvl":
+        import torchvision.transforms as T
+        from torchvision.transforms.functional import InterpolationMode
+        IMAGENET_MEAN = (0.485, 0.456, 0.406)
+        IMAGENET_STD = (0.229, 0.224, 0.225)
+        transform = T.Compose([
+            T.Lambda(lambda img: img.convert('RGB') if img.mode != 'RGB' else img),
+            T.Resize((448, 448), interpolation=InterpolationMode.BICUBIC),
+            T.ToTensor(),
+            T.Normalize(mean=IMAGENET_MEAN, std=IMAGENET_STD),
+        ])
+        pixel_values = transform(image).unsqueeze(0).to(device=device, dtype=torch.bfloat16)
+        query = f"<image>\n{question}"
+        text_inputs = tokenizer(query, return_tensors="pt")
+        inputs = {k: v.to(device) for k, v in text_inputs.items()}
+        inputs["pixel_values"] = pixel_values
+        return inputs
+
+    elif api == "deepseek_vl2":
+        # DeepSeek-VL2 uses its own preprocessing
+        from deepseek_vl2.utils.io import load_pil_images
+        conversation = [{"role": "user", "content": f"<image>\n{question}",
+                         "images": [image]}]
+        text_inputs = tokenizer(question, return_tensors="pt")
+        inputs = {k: v.to(device) for k, v in text_inputs.items()}
+        # Note: DeepSeek image processing may need adaptation
+        return inputs
+
+    raise ValueError(f"Unknown input_api: {api}")
 
 def generate_candidates(model, processor, sample, group_size, temperature,
-                        top_p, max_new_tokens, min_think_tokens, device):
+                        top_p, max_new_tokens, min_think_tokens, device,
+                        tokenizer=None):
     question = sample["question"]
     image = sample["image"]
-    inputs = prepare_inputs(processor, image, question, device)
+    tok = tokenizer or (processor.tokenizer if processor else None)
+    api = ACTIVE_MODEL_CFG["input_api"]
+
+    # Clamp temperature for models with max_temperature constraint
+    max_temp = ACTIVE_MODEL_CFG.get("max_temperature")
+    if max_temp and temperature > max_temp:
+        temperature = max_temp
+
+    inputs = prepare_inputs(processor, image, question, device, tokenizer=tok)
     prompt_len = inputs["input_ids"].shape[1]
     candidates, candidate_ids_list, think_ranges = [], [], []
+
     for _ in range(group_size):
         try:
-            with torch.no_grad():
-                out = model.generate(
-                    **inputs, max_new_tokens=max_new_tokens,
-                    min_new_tokens=min_think_tokens,
-                    temperature=temperature, top_p=top_p, do_sample=True)
-            gen_ids = out[0][prompt_len:].clone()
-            text = processor.tokenizer.decode(gen_ids, skip_special_tokens=False)
-            for tok in ["<|im_end|>", "<|endoftext|>", "<|im_start|>"]:
-                text = text.replace(tok, "")
-            candidates.append(text.strip())
-            candidate_ids_list.append(gen_ids.detach())
-            think_ranges.append(find_think_token_range(processor.tokenizer, gen_ids))
-        except Exception:
+            if api == "internvl" and hasattr(model, 'chat'):
+                # InternVL uses model.chat() for generation
+                import torchvision.transforms as T
+                from torchvision.transforms.functional import InterpolationMode
+                IMAGENET_MEAN = (0.485, 0.456, 0.406)
+                IMAGENET_STD = (0.229, 0.224, 0.225)
+                transform = T.Compose([
+                    T.Lambda(lambda img: img.convert('RGB') if img.mode != 'RGB' else img),
+                    T.Resize((448, 448), interpolation=InterpolationMode.BICUBIC),
+                    T.ToTensor(),
+                    T.Normalize(mean=IMAGENET_MEAN, std=IMAGENET_STD),
+                ])
+                pv = transform(image).unsqueeze(0).to(device=device, dtype=torch.bfloat16)
+                with torch.no_grad():
+                    response = model.chat(tok, pv, question,
+                                          generation_config={"max_new_tokens": max_new_tokens,
+                                                             "temperature": temperature,
+                                                             "do_sample": True})
+                candidates.append(response.strip())
+                # Encode response to get candidate_ids
+                gen_ids = tok.encode(response, return_tensors="pt")[0].to(device)
+                candidate_ids_list.append(gen_ids.detach())
+                think_ranges.append((0, len(gen_ids)))  # No thinking tags
+            else:
+                with torch.no_grad():
+                    gen_kwargs = dict(
+                        **inputs, max_new_tokens=max_new_tokens,
+                        temperature=temperature, top_p=top_p, do_sample=True)
+                    if ACTIVE_MODEL_CFG.get("thinking", False):
+                        gen_kwargs["min_new_tokens"] = min_think_tokens
+                    out = model.generate(**gen_kwargs)
+                gen_ids = out[0][prompt_len:].clone()
+                text = tok.decode(gen_ids, skip_special_tokens=False)
+                for special in ["<|im_end|>", "<|endoftext|>", "<|im_start|>"]:
+                    text = text.replace(special, "")
+                candidates.append(text.strip())
+                candidate_ids_list.append(gen_ids.detach())
+                if ACTIVE_MODEL_CFG.get("thinking", False):
+                    think_ranges.append(find_think_token_range(tok, gen_ids))
+                else:
+                    think_ranges.append((0, len(gen_ids)))
+        except Exception as e:
             candidates.append("")
             candidate_ids_list.append(torch.tensor([], dtype=torch.long, device=device))
             think_ranges.append((0, 0))
     inputs = {k: v.clone() if isinstance(v, torch.Tensor) else v
               for k, v in inputs.items()}
     return candidates, candidate_ids_list, prompt_len, inputs, think_ranges
+
+
+def _get_model_layers(model):
+    """Navigate to model layers using ACTIVE_MODEL_CFG layer_path."""
+    path = ACTIVE_MODEL_CFG["layer_path"]
+    obj = model
+    for attr in path.split("."):
+        obj = getattr(obj, attr)
+    return obj
 
 
 # ══════════════════════════════════════════════════════════════════════
@@ -324,8 +481,8 @@ class VisionHeadHooks:
         # Get unique layers that need hooks
         self.layers_needed = sorted(set(l for l, h, d in vision_heads))
 
-        # Install hooks
-        layers = model.model.language_model.layers
+        # Install hooks — navigate to layers via model config layer_path
+        layers = _get_model_layers(model)
         for li in self.layers_needed:
             layer = layers[li]
             o_proj = layer.self_attn.o_proj
@@ -382,7 +539,7 @@ class AdaptiveVisionHeadHooks:
         self._captured = {}
         self._hooks = []
 
-        layers = model.model.language_model.layers
+        layers = _get_model_layers(model)
         for li in range(num_layers):
             o_proj = layers[li].self_attn.o_proj
 
@@ -1329,7 +1486,7 @@ def evaluate_textvqa(model, processor, samples, device, max_eval=100):
             inputs = prepare_inputs(processor, s["image"], q, device)
             with torch.no_grad():
                 out = model.generate(**inputs, max_new_tokens=512, do_sample=False)
-            raw = processor.tokenizer.decode(
+            raw = (processor.tokenizer if processor else tokenizer).decode(
                 out[0][inputs["input_ids"].shape[1]:], skip_special_tokens=False)
             for tok in ["<|im_end|>", "<|endoftext|>", "<|im_start|>"]:
                 raw = raw.replace(tok, "")
@@ -1358,7 +1515,7 @@ def evaluate_pope(model, processor, samples, device, max_eval=60):
             inputs = prepare_inputs(processor, s["image"], q, device)
             with torch.no_grad():
                 out = model.generate(**inputs, max_new_tokens=512, do_sample=False)
-            raw = processor.tokenizer.decode(
+            raw = (processor.tokenizer if processor else tokenizer).decode(
                 out[0][inputs["input_ids"].shape[1]:], skip_special_tokens=False)
             for tok in ["<|im_end|>", "<|endoftext|>", "<|im_start|>"]:
                 raw = raw.replace(tok, "")
@@ -1391,14 +1548,14 @@ def evaluate_blind(model, processor, samples, device, n=50):
             inputs = prepare_inputs(processor, s["image"], q, device)
             with torch.no_grad():
                 out = model.generate(**inputs, max_new_tokens=512, do_sample=False)
-            raw = processor.tokenizer.decode(
+            raw = (processor.tokenizer if processor else tokenizer).decode(
                 out[0][inputs["input_ids"].shape[1]:], skip_special_tokens=False)
             if extract_yes_no(raw) == gt: real_c += 1
             black = Image.new('RGB', s["image"].size, (0, 0, 0))
             inputs_b = prepare_inputs(processor, black, q, device)
             with torch.no_grad():
                 out_b = model.generate(**inputs_b, max_new_tokens=512, do_sample=False)
-            raw_b = processor.tokenizer.decode(
+            raw_b = (processor.tokenizer if processor else tokenizer).decode(
                 out_b[0][inputs_b["input_ids"].shape[1]:], skip_special_tokens=False)
             if extract_yes_no(raw_b) == gt: blind_c += 1
             total += 1
@@ -1478,7 +1635,7 @@ def evaluate_mme(model, processor, device, max_pairs=100):
                 inputs = {k: v.to(device) for k, v in inputs.items()}
                 with torch.no_grad():
                     out = model.generate(**inputs, max_new_tokens=512, do_sample=False)
-                raw = processor.tokenizer.decode(
+                raw = (processor.tokenizer if processor else tokenizer).decode(
                     out[0][inputs["input_ids"].shape[1]:], skip_special_tokens=False)
                 for tok in ["<|im_end|>", "<|endoftext|>", "<|im_start|>"]:
                     raw = raw.replace(tok, "")
@@ -1617,7 +1774,7 @@ def prescreen_think_lengths(model, processor, samples, device,
             cands, cand_ids, pl, inp, tranges = generate_candidates(
                 model, processor, sample, 1,
                 temperature, top_p, max_new_tokens,
-                min_think_tokens, device)
+                min_think_tokens, device, tokenizer=tokenizer)
             t_start, t_end = tranges[0]
             cache[i] = t_end - t_start
             del cands, cand_ids, inp
@@ -1714,25 +1871,32 @@ def run_training(cfg, train_data, eval_data, model_path=None,
           f"{len(set(l for l,h,d in cfg['vision_heads']))} layers")
     print(f"{'='*70}\n")
 
-    model, processor, tokenizer = load_model(model_path, for_training=True)
+    model, processor, tokenizer = load_model(model_path, for_training=True,
+                                              model_key=cfg.get("model_key"))
     device = next(model.parameters()).device
 
     # Install vision head hooks (persistent during training)
     use_adaptive = cfg.get("adaptive_heads", False)
     use_soft = cfg.get("soft_weighted_heads", False)
+    mcfg = ACTIVE_MODEL_CFG
+    n_layers = mcfg["num_layers"]
+    n_heads = mcfg["num_heads"]
+    h_dim = mcfg["head_dim"]
+    total_heads = n_layers * n_heads
+
     if use_adaptive or use_soft:
-        hooks = AdaptiveVisionHeadHooks(model, num_layers=28,
-                                         num_heads=16, head_dim=128)
+        hooks = AdaptiveVisionHeadHooks(model, num_layers=n_layers,
+                                         num_heads=n_heads, head_dim=h_dim)
         if use_soft:
             soft_t = cfg.get("soft_temperature", "auto")
-            print(f"[hooks] Exp9 soft-weighted: ALL 28 layers hooked (448 heads), "
+            print(f"[hooks] Exp9 soft-weighted: ALL {n_layers} layers hooked ({total_heads} heads), "
                   f"sigmoid weights, temperature={soft_t}")
         else:
-            print(f"[hooks] Exp8 adaptive: ALL 28 layers hooked (448 heads), "
+            print(f"[hooks] Exp8 adaptive: ALL {n_layers} layers hooked ({total_heads} heads), "
                   f"top-{cfg.get('adaptive_top_k', 12)} selected per sample")
     else:
         hooks = VisionHeadHooks(model, cfg["vision_heads"],
-                                num_heads=16, head_dim=128)
+                                num_heads=n_heads, head_dim=h_dim)
         print(f"[hooks] Fixed mode: installed on layers {hooks.layers_needed}")
 
     optimizer = torch.optim.AdamW(
@@ -1831,7 +1995,8 @@ def run_training(cfg, train_data, eval_data, model_path=None,
                     generate_candidates(
                         model, processor, sample, cfg["group_size"],
                         cfg["temperature"], cfg["top_p"],
-                        cfg["max_new_tokens"], cfg["min_think_tokens"], device)
+                        cfg["max_new_tokens"], cfg["min_think_tokens"], device,
+                        tokenizer=tokenizer)
             except torch.cuda.OutOfMemoryError:
                 torch.cuda.empty_cache(); gc.collect()
                 print(f"  [step {step+1}.{sub+1}] OOM gen, skip"); continue
@@ -1870,7 +2035,8 @@ def run_training(cfg, train_data, eval_data, model_path=None,
                             generate_candidates(
                                 model, processor, alt_sample, cfg["group_size"],
                                 cfg["temperature"], cfg["top_p"],
-                                cfg["max_new_tokens"], cfg["min_think_tokens"], device)
+                                cfg["max_new_tokens"], cfg["min_think_tokens"], device,
+                                tokenizer=tokenizer)
                         if use_soft:
                             rewards, details, token_weights_list = compute_rewards_soft_weighted(
                                 model, processor, alt_sample, candidates, cand_ids_list,
@@ -2069,8 +2235,11 @@ def run_training(cfg, train_data, eval_data, model_path=None,
 
 def main():
     parser = argparse.ArgumentParser(description="Phase 6: Head-Level Mask LSR GRPO")
-    parser.add_argument("--model-path", type=str,
-                        default="Qwen/Qwen3-VL-2B-Thinking")
+    parser.add_argument("--model-key", type=str, default="qwen3_vl_2b",
+                        choices=list(MODEL_CONFIGS.keys()),
+                        help="Model to train (default: qwen3_vl_2b)")
+    parser.add_argument("--model-path", type=str, default=None,
+                        help="Override HF model path (default: from model config)")
     parser.add_argument("--output-dir", type=str,
                         default="checkpoints/phase6_head_mask/alpha05")
     parser.add_argument("--steps", type=int, default=20)
@@ -2158,13 +2327,25 @@ def main():
                         help="Max think tokens per phase (comma-separated)")
     args = parser.parse_args()
 
+    # Set active model config
+    global ACTIVE_MODEL_KEY, ACTIVE_MODEL_CFG, HF_ID
+    ACTIVE_MODEL_KEY = args.model_key
+    ACTIVE_MODEL_CFG = MODEL_CONFIGS[args.model_key]
+    HF_ID = ACTIVE_MODEL_CFG["hf_id"]
+    if args.model_path is None:
+        args.model_path = ACTIVE_MODEL_CFG["hf_id"]
+
     random.seed(args.seed)
     np.random.seed(args.seed)
     torch.manual_seed(args.seed)
 
     # Load vision heads from calibration
+    cal_file = args.calibration_file
+    if cal_file == "checkpoints/calibration/qwen3_vl_2b/calibration_meta.json" and args.model_key != "qwen3_vl_2b":
+        cal_file = ACTIVE_MODEL_CFG.get("calibration_file", cal_file)
     vision_heads = list(DEFAULT_VISION_HEADS[:args.top_k_heads])
-    if os.path.exists(args.calibration_file):
+    args.calibration_file = cal_file
+    if os.path.exists(cal_file):
         try:
             with open(args.calibration_file) as f:
                 meta = json.load(f)
