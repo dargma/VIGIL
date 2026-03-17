@@ -127,11 +127,17 @@ def load_mme_train_data(max_samples=500, eval_reserve=200, seed=42):
             if img is None:
                 continue
             ans = row["answer"].strip()
+            # Rewrite prompt: encourage reasoning about visual content
+            # Original: "Is X? Please answer yes or no."
+            # Updated: "Look at the image carefully. Is X? Think step by step, then answer yes or no."
+            q = row["question"]
+            q = q.replace("Please answer yes or no.",
+                          "Think step by step about what you see in the image, then answer yes or no.")
             samples.append({
-                "question": row["question"],
+                "question": q,
                 "answer": ans, "image": img,
                 "answers_all": [ans],
-                "type": "yes_no", "source": "mme",
+                "type": "yesno", "source": "mme",
             })
 
     rng.shuffle(samples)
@@ -1319,7 +1325,7 @@ def evaluate_textvqa(model, processor, samples, device, max_eval=100):
     total = 0
     for s in samples[:max_eval]:
         try:
-            q = s["question"]
+            q = s["question"] + " Answer briefly."
             inputs = prepare_inputs(processor, s["image"], q, device)
             with torch.no_grad():
                 out = model.generate(**inputs, max_new_tokens=512, do_sample=False)
@@ -1751,17 +1757,16 @@ def run_training(cfg, train_data, eval_data, model_path=None,
     n_tvqa = cfg.get("eval_textvqa_samples", 50)
     n_mme = cfg.get("eval_mme_pairs", 0)
 
-    # Pre-eval
-    print(f"Pre-training eval (POPE={n_pope}, Blind={n_blind}, TextVQA={n_tvqa}, MME={n_mme})...")
-    pre_textvqa = evaluate_textvqa(model, processor, textvqa_eval_data or [], device, n_tvqa) \
-        if textvqa_eval_data else {"acc": 0, "total": 0}
-    pre_pope = evaluate_pope(model, processor, eval_data, device, n_pope)
-    pre_blind = evaluate_blind(model, processor, eval_data, device, n_blind)
-    pre_mme = evaluate_mme(model, processor, device, n_mme) if n_mme > 0 else None
-    eval_msg = f"  TextVQA: {pre_textvqa['acc']:.1%} | POPE: {pre_pope['acc']:.1%} | Gap: {pre_blind['gap']:.1%}"
-    if pre_mme:
-        eval_msg += f" | MME P={pre_mme['perception']:.1%} C={pre_mme['cognition']:.1%}"
-    print(eval_msg)
+    # Pre-eval (fast: POPE-only, 60 samples)
+    pre_n = min(60, n_pope)
+    print(f"Pre-training eval (POPE={pre_n} quick)...")
+    pre_pope = evaluate_pope(model, processor, eval_data, device, pre_n)
+    pre_textvqa = {"acc": 0, "total": 0}
+    pre_blind = {"gap": 0, "real_acc": 0, "blind_acc": 0, "total": 0}
+    pre_mme = None
+    print(f"  POPE: {pre_pope['acc']:.1%} (quick pre-eval)")
+    eval_at = cfg.get('eval_steps_list', []) or f"every {cfg['eval_every']}"
+    print(f"  Full eval (POPE={n_pope}, Blind={n_blind}, TextVQA={n_tvqa}, MME={n_mme}) at steps: {eval_at}")
 
     history = {
         "config": {k: v for k, v in cfg.items() if k != "vision_heads"},
@@ -1775,123 +1780,161 @@ def run_training(cfg, train_data, eval_data, model_path=None,
     optimizer.zero_grad()
     best_acc = pre_pope["acc"]
 
+    # Data iterator: deterministic order via seed, epoch-aware reshuffling
+    samples_per_step = cfg.get("samples_per_step", 1)
+    data_rng = random.Random(cfg.get("seed", 42))
+    data_order = list(range(len(train_data)))
+    data_rng.shuffle(data_order)
+    data_cursor = 0
+    data_epoch = 0
+    total_samples_seen = 0
+    n_accum = samples_per_step  # accumulate over this many samples
+
+    print(f"[data] {len(train_data)} samples, {samples_per_step} per step, "
+          f"{cfg['num_steps']} steps → {cfg['num_steps'] * samples_per_step} total "
+          f"({cfg['num_steps'] * samples_per_step * 100 / len(train_data):.1f}% coverage)")
+
     for step in range(cfg["num_steps"]):
         step_t0 = time.time()
+        step_losses = []
+        step_details_all = []
+        sub_ok = 0
 
-        # Sample selection: curriculum or round-robin
-        if curriculum_bins is not None:
-            boundaries = cfg.get("curriculum_phases", [10, 20, 30])
-            phase_idx = get_curriculum_phase(step, boundaries)
-            available = curriculum_bins[min(phase_idx, len(curriculum_bins) - 1)]
-            if not available:
-                available = [(i, s) for i, s in enumerate(train_data)]
-            _, sample = available[step % len(available)]
-        else:
-            sample = train_data[step % len(train_data)]
+        for sub in range(samples_per_step):
+            # Deterministic sample selection with epoch-aware reshuffling
+            if data_cursor >= len(data_order):
+                data_epoch += 1
+                data_rng.shuffle(data_order)
+                data_cursor = 0
+                print(f"  [data] Epoch {data_epoch} — reshuffled")
 
-        # Generate candidates
-        model.eval()
-        if hasattr(model, 'gradient_checkpointing_disable'):
-            model.gradient_checkpointing_disable()
-        try:
-            candidates, cand_ids_list, prompt_len, inputs, think_ranges = \
-                generate_candidates(
-                    model, processor, sample, cfg["group_size"],
-                    cfg["temperature"], cfg["top_p"],
-                    cfg["max_new_tokens"], cfg["min_think_tokens"], device)
-        except torch.cuda.OutOfMemoryError:
-            torch.cuda.empty_cache(); gc.collect()
-            print(f"  [step {step+1}] OOM gen, skip"); continue
-
-        # Rewards + head-level token weights
-        try:
-            if use_soft:
-                rewards, details, token_weights_list = compute_rewards_soft_weighted(
-                    model, processor, sample, candidates, cand_ids_list,
-                    think_ranges, prompt_len, device, cfg, hooks)
-            elif use_adaptive:
-                rewards, details, token_weights_list = compute_rewards_adaptive_head(
-                    model, processor, sample, candidates, cand_ids_list,
-                    think_ranges, prompt_len, device, cfg, hooks)
+            if curriculum_bins is not None:
+                boundaries = cfg.get("curriculum_phases", [10, 20, 30])
+                global_idx = step * samples_per_step + sub
+                phase_idx = get_curriculum_phase(global_idx, boundaries)
+                available = curriculum_bins[min(phase_idx, len(curriculum_bins) - 1)]
+                if not available:
+                    available = [(i, s) for i, s in enumerate(train_data)]
+                _, sample = available[global_idx % len(available)]
             else:
-                rewards, details, token_weights_list = compute_rewards_with_head_lsr(
-                    model, processor, sample, candidates, cand_ids_list,
-                    think_ranges, prompt_len, device, cfg, hooks)
-        except torch.cuda.OutOfMemoryError:
-            torch.cuda.empty_cache(); gc.collect()
-            print(f"  [step {step+1}] OOM reward, skip"); continue
+                sample_idx = data_order[data_cursor]
+                sample = train_data[sample_idx]
+                data_cursor += 1
+                total_samples_seen += 1
 
-        rarr = np.array(rewards)
-        rstd = rarr.std()
+            # Generate candidates
+            model.eval()
+            if hasattr(model, 'gradient_checkpointing_disable'):
+                model.gradient_checkpointing_disable()
+            try:
+                candidates, cand_ids_list, prompt_len, inputs, think_ranges = \
+                    generate_candidates(
+                        model, processor, sample, cfg["group_size"],
+                        cfg["temperature"], cfg["top_p"],
+                        cfg["max_new_tokens"], cfg["min_think_tokens"], device)
+            except torch.cuda.OutOfMemoryError:
+                torch.cuda.empty_cache(); gc.collect()
+                print(f"  [step {step+1}.{sub+1}] OOM gen, skip"); continue
 
-        # Curriculum filtering + Dynamic resampling (DAPO-style)
-        # Skip when all candidates agree → zero gradient → wasted step
-        if rstd < 1e-8:
-            resample_tries = 0
-            max_resample = 5  # Try harder (was 3)
-            while rstd < 1e-8 and resample_tries < max_resample:
-                resample_tries += 1
-                alt_idx = (step * 7 + resample_tries * 13) % len(train_data)
-                alt_sample = train_data[alt_idx]
-                try:
-                    candidates, cand_ids_list, prompt_len, inputs, think_ranges = \
-                        generate_candidates(
-                            model, processor, alt_sample, cfg["group_size"],
-                            cfg["temperature"], cfg["top_p"],
-                            cfg["max_new_tokens"], cfg["min_think_tokens"], device)
-                    if use_soft:
-                        rewards, details, token_weights_list = compute_rewards_soft_weighted(
-                            model, processor, alt_sample, candidates, cand_ids_list,
-                            think_ranges, prompt_len, device, cfg, hooks)
-                    elif use_adaptive:
-                        rewards, details, token_weights_list = compute_rewards_adaptive_head(
-                            model, processor, alt_sample, candidates, cand_ids_list,
-                            think_ranges, prompt_len, device, cfg, hooks)
-                    else:
-                        rewards, details, token_weights_list = compute_rewards_with_head_lsr(
-                            model, processor, alt_sample, candidates, cand_ids_list,
-                            think_ranges, prompt_len, device, cfg, hooks)
-                    sample = alt_sample
-                    rarr = np.array(rewards)
-                    rstd = rarr.std()
-                except Exception:
-                    break
+            # Rewards + head-level token weights
+            try:
+                if use_soft:
+                    rewards, details, token_weights_list = compute_rewards_soft_weighted(
+                        model, processor, sample, candidates, cand_ids_list,
+                        think_ranges, prompt_len, device, cfg, hooks)
+                elif use_adaptive:
+                    rewards, details, token_weights_list = compute_rewards_adaptive_head(
+                        model, processor, sample, candidates, cand_ids_list,
+                        think_ranges, prompt_len, device, cfg, hooks)
+                else:
+                    rewards, details, token_weights_list = compute_rewards_with_head_lsr(
+                        model, processor, sample, candidates, cand_ids_list,
+                        think_ranges, prompt_len, device, cfg, hooks)
+            except torch.cuda.OutOfMemoryError:
+                torch.cuda.empty_cache(); gc.collect()
+                print(f"  [step {step+1}.{sub+1}] OOM reward, skip"); continue
 
+            rarr = np.array(rewards)
+            rstd = rarr.std()
+
+            # Dynamic resampling for zero-variance groups (DAPO-style)
             if rstd < 1e-8:
-                elapsed = time.time() - step_t0
-                print(f"  [step {step+1}/{cfg['num_steps']}] "
-                      f"SKIP r={rarr.mean():.3f} ({elapsed:.1f}s)")
-                history["steps"].append({
-                    "step": step + 1, "skipped": True,
-                    "mean_reward": float(rarr.mean())})
-                del candidates, cand_ids_list, inputs; continue
+                resample_tries = 0
+                max_resample = 5
+                while rstd < 1e-8 and resample_tries < max_resample:
+                    resample_tries += 1
+                    alt_idx = (step * 7 + sub * 31 + resample_tries * 13) % len(train_data)
+                    alt_sample = train_data[alt_idx]
+                    try:
+                        candidates, cand_ids_list, prompt_len, inputs, think_ranges = \
+                            generate_candidates(
+                                model, processor, alt_sample, cfg["group_size"],
+                                cfg["temperature"], cfg["top_p"],
+                                cfg["max_new_tokens"], cfg["min_think_tokens"], device)
+                        if use_soft:
+                            rewards, details, token_weights_list = compute_rewards_soft_weighted(
+                                model, processor, alt_sample, candidates, cand_ids_list,
+                                think_ranges, prompt_len, device, cfg, hooks)
+                        elif use_adaptive:
+                            rewards, details, token_weights_list = compute_rewards_adaptive_head(
+                                model, processor, alt_sample, candidates, cand_ids_list,
+                                think_ranges, prompt_len, device, cfg, hooks)
+                        else:
+                            rewards, details, token_weights_list = compute_rewards_with_head_lsr(
+                                model, processor, alt_sample, candidates, cand_ids_list,
+                                think_ranges, prompt_len, device, cfg, hooks)
+                        sample = alt_sample
+                        rarr = np.array(rewards)
+                        rstd = rarr.std()
+                    except Exception:
+                        break
 
-        if cfg.get("gdpo", False):
-            # GDPO: rewards are already independently normalized + combined
-            # Just use them directly as advantages (already zero-mean-ish)
-            advantages = ((rarr - rarr.mean()) / (rstd + 1e-8)).tolist()
-        else:
-            advantages = ((rarr - rarr.mean()) / (rstd + 1e-8)).tolist()
+                if rstd < 1e-8:
+                    if samples_per_step == 1:
+                        elapsed = time.time() - step_t0
+                        print(f"  [step {step+1}/{cfg['num_steps']}] "
+                              f"SKIP r={rarr.mean():.3f} ({elapsed:.1f}s)")
+                        history["steps"].append({
+                            "step": step + 1, "skipped": True,
+                            "mean_reward": float(rarr.mean())})
+                    del candidates, cand_ids_list, inputs; continue
 
-        # Loss with head-level token weighting
-        model.train()
-        if hasattr(model, 'gradient_checkpointing_enable'):
-            model.gradient_checkpointing_enable()
-        try:
-            loss, lstats = compute_head_lsr_grpo_loss(
-                model, inputs, cand_ids_list, prompt_len,
-                advantages, token_weights_list, cfg)
-            (loss / cfg["grad_accum"]).backward()
+            if cfg.get("gdpo", False):
+                advantages = ((rarr - rarr.mean()) / (rstd + 1e-8)).tolist()
+            else:
+                advantages = ((rarr - rarr.mean()) / (rstd + 1e-8)).tolist()
 
-            if (step + 1) % cfg["grad_accum"] == 0:
-                torch.nn.utils.clip_grad_norm_(
-                    model.parameters(), cfg.get("max_grad_norm", 1.0))
-                optimizer.step()
-                optimizer.zero_grad()
-        except torch.cuda.OutOfMemoryError:
-            optimizer.zero_grad()
-            torch.cuda.empty_cache(); gc.collect()
-            print(f"  [step {step+1}] OOM loss, skip"); continue
+            # Loss with head-level token weighting
+            model.train()
+            if hasattr(model, 'gradient_checkpointing_enable'):
+                model.gradient_checkpointing_enable()
+            try:
+                loss, lstats = compute_head_lsr_grpo_loss(
+                    model, inputs, cand_ids_list, prompt_len,
+                    advantages, token_weights_list, cfg)
+                (loss / n_accum).backward()
+                step_losses.append(loss.item())
+                step_details_all.extend(details)
+                sub_ok += 1
+            except torch.cuda.OutOfMemoryError:
+                torch.cuda.empty_cache(); gc.collect()
+                print(f"  [step {step+1}.{sub+1}] OOM loss, skip"); continue
+
+        # Optimizer step after accumulating all sub-samples
+        if sub_ok > 0:
+            torch.nn.utils.clip_grad_norm_(
+                model.parameters(), cfg.get("max_grad_norm", 1.0))
+            optimizer.step()
+        optimizer.zero_grad()
+
+        if sub_ok == 0:
+            history["steps"].append({
+                "step": step + 1, "skipped": True, "mean_reward": 0.0})
+            continue
+
+        # Use accumulated details for logging
+        details = step_details_all
+        loss_val = np.mean(step_losses)
 
         elapsed = time.time() - step_t0
         mc = np.mean([d["correct"] for d in details])
@@ -1901,7 +1944,8 @@ def run_training(cfg, train_data, eval_data, model_path=None,
         tw_max = np.mean([d["token_weight_max"] for d in details])
 
         step_info = {
-            "step": step + 1, "loss": loss.item(),
+            "step": step + 1, "loss": float(loss_val),
+            "samples_ok": sub_ok, "samples_seen": total_samples_seen,
             "mean_reward": float(rarr.mean()),
             "reward_std": float(rstd),
             "mean_correct": float(mc),
@@ -1909,7 +1953,7 @@ def run_training(cfg, train_data, eval_data, model_path=None,
             "mean_decay_pen": float(md),
             "token_weight_mean": float(tw_mean),
             "token_weight_max": float(tw_max),
-            "mean_entropy": float(np.mean(lstats["entropy"])) if lstats["entropy"] else 0,
+            "mean_entropy": float(np.mean(lstats["entropy"])) if (sub_ok > 0 and lstats.get("entropy")) else 0,
             "elapsed": elapsed,
         }
         # Gated Head-LSR tracking
@@ -1934,10 +1978,11 @@ def run_training(cfg, train_data, eval_data, model_path=None,
                 step, cfg.get("curriculum_phases", [10, 20, 30]))
         history["steps"].append(step_info)
 
+        sub_info = f" [{sub_ok}/{samples_per_step}]" if samples_per_step > 1 else ""
         step_msg = (f"  [step {step+1}/{cfg['num_steps']}] "
-                    f"loss={loss.item():.4f} r={rarr.mean():.3f}±{rstd:.3f} "
+                    f"loss={loss_val:.4f} r={rarr.mean():.3f}±{rstd:.3f} "
                     f"correct={mc:.2f} headΔ={mh:.3f} decay={md:.3f} "
-                    f"tw={tw_mean:.2f}/{tw_max:.1f} ({elapsed:.1f}s)")
+                    f"tw={tw_mean:.2f}/{tw_max:.1f} ({elapsed:.1f}s){sub_info}")
         if use_soft and details:
             d0 = details[0]
             step_msg += (f" [soft: {d0.get('n_active_heads',0)} active, "
@@ -1946,7 +1991,12 @@ def run_training(cfg, train_data, eval_data, model_path=None,
         print(step_msg, flush=True)
 
         # Eval
-        if (step + 1) % cfg["eval_every"] == 0 or step + 1 == cfg["num_steps"]:
+        eval_steps_list = cfg.get("eval_steps_list", [])
+        should_eval = ((step + 1) in eval_steps_list) if eval_steps_list else \
+                      ((step + 1) % cfg["eval_every"] == 0 or step + 1 == cfg["num_steps"])
+        if should_eval:
+            # Free training memory before eval to avoid OOM
+            torch.cuda.empty_cache(); gc.collect()
             tvqa_res = evaluate_textvqa(model, processor,
                                          textvqa_eval_data or [], device, n_tvqa) \
                 if textvqa_eval_data else {"acc": 0, "total": 0}
@@ -2036,9 +2086,14 @@ def main():
                         help="Head score normalization (head scores range 5-10)")
     parser.add_argument("--beta-entropy", type=float, default=0.01)
     parser.add_argument("--grad-accum", type=int, default=2)
+    parser.add_argument("--samples-per-step", type=int, default=1,
+                        help="Number of samples per optimizer step (mini-batch). "
+                             "Total coverage = steps × samples_per_step / train_samples")
     parser.add_argument("--max-new-tokens", type=int, default=512)
     parser.add_argument("--min-think-tokens", type=int, default=32)
     parser.add_argument("--eval-every", type=int, default=5)
+    parser.add_argument("--eval-steps", type=str, default="",
+                        help="Comma-separated list of steps to eval at (overrides --eval-every)")
     parser.add_argument("--eval-pope-samples", type=int, default=60,
                         help="POPE eval samples (default 60)")
     parser.add_argument("--eval-blind-samples", type=int, default=50,
@@ -2139,6 +2194,10 @@ def main():
     cfg["gated_head_lsr"] = cfg.pop("gated_head_lsr", False)
     if cfg.get("gated_alpha") is None:
         cfg["gated_alpha"] = cfg["alpha"]
+
+    # Eval steps
+    es = cfg.pop("eval_steps", "")
+    cfg["eval_steps_list"] = [int(x) for x in es.split(",") if x.strip()] if es else []
 
     # Curriculum
     cfg["curriculum"] = cfg.pop("curriculum", False)
