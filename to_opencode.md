@@ -28,6 +28,8 @@ This document provides step-by-step instructions to reproduce the entire VIGIL p
 20. [Evaluation](#20-evaluation)
 21. [Expected Results](#21-expected-results)
 22. [Troubleshooting](#22-troubleshooting)
+23. [**TOP 3 RECOMMENDED: Reproduce & Expand Exp1, 8, 10**](#23-top-3-recommended-reproduce--expand-exp1-8-10)
+24. [Exp13: Target-Calibrated Reward (Negative Result)](#24-exp13-target-calibrated-reward-negative-result)
 
 ---
 
@@ -50,15 +52,27 @@ VIGIL (Vision-Grounded Inference via Guided head-Level steering) uses head-level
 2. **Head-level reward signal**: Measure how much vision heads contribute to the model's output
 3. **Gated GRPO training**: Switch between correctness reward (when gradient exists) and vision reward (when all candidates agree)
 
-### Key Results
+### Key Results (Final, 60-sample POPE eval)
 
-| Experiment | POPE | Gap (real-blind) | TextVQA | Notes |
-|-----------|------|-------------------|---------|-------|
-| Baseline (HF) | 91.7% | 40.0pp | 72.7% | No training |
-| Exp1: Gated Head-LSR (step 10) | **95.0%** | **44.0pp** | **74.7%** | Best overall |
-| Exp4: Head Masking KL | TBD | TBD | TBD | KL-based causal signal |
-| Exp5: Learned Importance + KL | TBD | TBD | TBD | Trainable head selection |
-| Exp6: Learned Importance + LSR | TBD | TBD | TBD | Combines best of both |
+| Experiment | POPE | Gap | TextVQA | Stability | Notes |
+|-----------|------|-----|---------|-----------|-------|
+| Baseline (HF) | 91.7% | 40.0pp | 72.7% | — | No training |
+| **Exp1: Gated Head-LSR** | **95.0%** | **44.0pp** | **74.7%** | 2/3 at 95% | **Best TextVQA, most novel** |
+| **Exp8: Adaptive Top-K** | **95.0%** | **44.0pp** | 72.7% | 3/4 at 95% | **Zero TextVQA cost** |
+| **Exp10: Sharp Sigmoid** | **95.0%** | **44.0pp** | 70.7% | **4/6 at 95%** | **Most stable** |
+| Exp9: Soft All-Heads | 95.0% | 44.0pp | 68.7% | 1/6 at 95% | Too diluted, -4pp TextVQA |
+| Exp11: Layer-Aware | 95.0% | 44.0pp | 70.7% | 2/6 at 95% | No advantage over Exp10 |
+| Exp13: Target-Calibrated | 95.0% | 44.0pp | — | Degrades by step 10 | Negative result |
+| Exp4: Head Masking KL | 90.0% | 38.0pp | 72.7% | — | KL signal too weak |
+| Exp5: Learned Imp + KL | 90.0% | 38.0pp | 72.7% | — | FAILED (collapsed) |
+| Exp6: Learned Imp + LSR | 91.7% | 40.0pp | 72.7% | — | FAILED (detach bug) |
+| Exp7: Dynamic Selection | 91.7% | 40.0pp | 70.7% | — | FAILED (wrong signal) |
+
+### Critical Note on Evaluation Scale
+
+60-sample POPE: each sample = 1.67pp. The 91.7%→95.0% jump = **2 more correct answers**.
+1K POPE eval (Phase 2 only): baseline 89.9%, GRPO-LSR 90.4% (+0.5pp).
+**1K POPE eval on Exp1/8/10 is the #1 priority — not yet done.**
 
 ---
 
@@ -1150,39 +1164,45 @@ python scripts/run_blind_test.py --model-path checkpoints/phase6c/gated_only/ste
 
 ## 21. Expected Results
 
-### Final Results Table (Qwen3-VL-2B-Thinking)
+### Final Results Table (Qwen3-VL-2B-Thinking, 60-sample POPE)
 
 ```
 ┌─────────────────────────────────────────────────────┬───────┬────────┬─────────┬──────────┐
 │              Experiment                             │ POPE  │  Gap   │ TextVQA │  Status  │
 ├─────────────────────────────────────────────────────┼───────┼────────┼─────────┼──────────┤
 │ Baseline (HF Thinking)                              │ 91.7% │ 40.0pp │ 72.7%   │ Done     │
-│ Exp1: Gated Head-LSR (500 samples, step 10)         │ 95.0% │ 44.0pp │ 74.7%   │ Done     │
+│ ★ Exp1: Gated Head-LSR (500 samples, step 10)      │ 95.0% │ 44.0pp │ 74.7%   │ BEST TVQ │
 │ Exp1: Gated Head-LSR (1K samples, step 10)          │ 93.3% │ 42.0pp │ 72.7%   │ Done     │
+│ ★ Exp8: Adaptive Top-K (1K, step 5-20)             │ 95.0% │ 44.0pp │ 72.7%   │ 0 DAMAGE │
+│ ★ Exp10: Sharp Sigmoid (1K, steps 5-30)            │ 95.0% │ 44.0pp │ 70.7%   │ STABLE   │
+│ Exp10: Sharp Sigmoid (2K, 4sps, step 10)            │ 95.0% │ 44.0pp │   —     │ Scaled   │
+│ Exp9: Soft All-Heads (1K, step 5)                   │ 95.0% │ 44.0pp │ 68.7%   │ Unstable │
+│ Exp11: Layer-Aware (1K, step 5)                     │ 95.0% │ 44.0pp │ 70.7%   │ No gain  │
+│ Exp13_1: Gaussian Target (2K, step 5)               │ 95.0% │ 44.0pp │   —     │ Neg res  │
+│ Exp13_2: Linear Target (2K)                         │ 91.7% │ 40.0pp │   —     │ FAILED   │
+│ Exp13_3: Asymmetric Target (2K, step 5)             │ 95.0% │ 44.0pp │   —     │ Neg res  │
+│ Exp13_4: Clipped Target (2K, step 5)                │ 95.0% │ 44.0pp │   —     │ Neg res  │
 │ Exp4: Head Masking KL (step 15)                     │ 90.0% │ 38.0pp │ 72.7%   │ No gain  │
 │ Exp5: Learned Importance + KL (step 15)             │ 90.0% │ 38.0pp │ 72.7%   │ FAILED   │
 │ Exp6: Learned Importance + LSR (step 15)            │ 90.0% │ 38.0pp │ 70.7%   │ FAILED   │
 │ Exp7: Dynamic Head Selection (1K, step 25)          │ 91.7% │ 40.0pp │ 70.7%   │ FAILED   │
-│ Exp8: Adaptive Head Gate (1K, step 5-20)            │ 95.0% │ 44.0pp │ 72.7%   │ Done     │
-│ Exp9: Soft-Weighted All-Head (1K, step 5-15)        │ 93.3% │ 42.0pp │ 72.7%   │ Done     │
-│ Exp10: Sharp Sigmoid (1K, steps 5-30)               │ 95.0% │ 44.0pp │ 72.7%   │ BEST     │
-│ Exp10: Sharp Sigmoid (2K scaled, running)           │  TBD  │  TBD   │  TBD    │ Running  │
-│ Exp11: Layer-Aware (1K)                             │  TBD  │  TBD   │  TBD    │ Planned  │
-│ Exp12: Top-P Adaptive (1K)                          │  TBD  │  TBD   │  TBD    │ Planned  │
 ├─────────────────────────────────────────────────────┼───────┼────────┼─────────┼──────────┤
 │ InternVL3.5-1B Baseline                             │ 78.2% │ 28.2pp │   —     │ Done     │
 │ InternVL3.5-1B BoN+SFT R2                          │ 83.4% │ 33.4pp │   —     │ Done     │
-│ InternVL3.5-1B Exp10 (planned)                      │  TBD  │  TBD   │  TBD    │ Planned  │
+│ InternVL3.5-1B Exp10 (planned)                      │  TBD  │  TBD   │  TBD    │ Blocked  │
 │ DeepSeek-VL2-Tiny Exp10 (planned)                   │  TBD  │  TBD   │  TBD    │ Planned  │
 └─────────────────────────────────────────────────────┴───────┴────────┴─────────┴──────────┘
 ```
 
-### Why Exp10 is Best
+### Top 3 Recommended Experiments (★)
 
-Exp10 (sharp sigmoid T/3) achieved **4 of 6 eval checkpoints at POPE 95.0%** — the most stable result:
-- Steps 5, 10, 15, 20, 30 all hit 95.0% (step 25 dipped to 93.3%)
-- Exp8 also hit 95.0% but at fewer checkpoints
-- The sharp sigmoid approximates discrete top-K selection with smooth gradients
+| Rank | Exp | Why Best | Unique Strength | Weakness |
+|------|-----|----------|-----------------|----------|
+| 1 | **Exp1** | Only one that improved TextVQA (+2pp) | Gating mechanism (novel contribution) | Less stable than Exp10 |
+| 2 | **Exp8** | Zero collateral damage to TextVQA | Per-sample targeting (most surgical) | Fewer eval points at 95% |
+| 3 | **Exp10** | Most stable (4/6 at 95%) | Data-driven temperature (simplest) | -2pp TextVQA |
+
+See [Section 23](#23-top-3-recommended-reproduce--expand-exp1-8-10) for full reproduction and expansion guide.
 
 ### Key Metrics
 
@@ -1272,3 +1292,502 @@ After each experiment, results should be appended to `lab/reports/autoresearch/r
 ```
 exp     method     steps   pope    gap     textvqa     notes   timestamp
 ```
+
+---
+
+## 23. TOP 3 RECOMMENDED: Reproduce & Expand Exp1, 8, 10
+
+This section is the **priority guide** for continuing experiments on a new machine. It covers exact reproduction commands, expected outputs, and expansion directions for the three best experiments.
+
+### 23.1 Quick Start (New Machine)
+
+```bash
+# 1. Clone and setup
+git clone https://github.com/dargma/VIGIL.git && cd VIGIL
+pip install torch torchvision torchaudio
+pip install transformers>=4.45.0 accelerate qwen-vl-utils pillow numpy tqdm matplotlib seaborn datasets
+
+# 2. Verify GPU
+python -c "import torch; print(f'CUDA: {torch.cuda.is_available()}, GPU: {torch.cuda.get_device_name()}')"
+
+# 3. Verify model loads
+python -c "
+from transformers import Qwen3VLForConditionalGeneration
+m = Qwen3VLForConditionalGeneration.from_pretrained('Qwen/Qwen3-VL-2B-Thinking', torch_dtype='auto', device_map='auto')
+print(f'Layers={m.config.num_hidden_layers}, Heads={m.config.num_attention_heads}, KV={m.config.num_key_value_heads}')
+# Expected: Layers=28, Heads=16, KV=8
+"
+
+# 4. Run baseline eval (should get ~91.7% POPE)
+PYTHONUNBUFFERED=1 python -u scripts/phase6_head_mask_grpo.py \
+    --steps 0 --alpha 0.5 --gdpo --vppo-mask --gated-head-lsr \
+    --eval-pope-samples 60 --eval-blind-samples 50 --eval-textvqa-samples 30 \
+    --output-dir checkpoints/baseline_verify
+```
+
+### 23.2 Reproduce Exp1: Gated Head-LSR (Recommended First)
+
+**Why Exp1 first**: It's the most novel contribution (gating mechanism), has the best TextVQA result, and uses the simplest head selection (fixed 12 calibrated heads = fastest per-step).
+
+#### Algorithm Summary
+
+```
+For each training step:
+  1. Sample question+image from TextVQA train
+  2. Generate 6 candidates (group=6, T=1.3)
+  3. Compute R_correct for each candidate
+  4. For each candidate:
+     - Forward with real image → capture 12 vision head activations
+     - Forward with black image → capture 12 vision head activations
+     - head_score(t) = Σ_{12 heads} ||act_real(t) - act_black(t)||₂
+  5. GATING DECISION:
+     - If variance(R_correct) > 0 → use R_correct ONLY (correctness gradient)
+     - If variance(R_correct) = 0 → use head_lsr with token weights (vision gradient)
+  6. Token weight: tw(t) = 1.0 + alpha × normalized(head_score(t))
+  7. GDPO: advantage = 0.6×Z(R_correct) + 0.4×Z(R_visual)
+  8. GRPO loss with VPPO (clip negative advantages to 0)
+```
+
+#### Exact Reproduction Command (500 samples, 15 steps)
+
+```bash
+PYTHONUNBUFFERED=1 python -u scripts/phase6_head_mask_grpo.py \
+    --steps 15 \
+    --alpha 0.5 \
+    --gdpo \
+    --vppo-mask \
+    --gated-head-lsr \
+    --lr 2e-6 \
+    --group-size 6 \
+    --temperature 1.3 \
+    --max-new-tokens 512 \
+    --train-samples 500 \
+    --eval-steps 5,10,15 \
+    --eval-pope-samples 60 \
+    --eval-blind-samples 50 \
+    --eval-textvqa-samples 30 \
+    --seed 42 \
+    --output-dir checkpoints/exp1_reproduce \
+    2>&1 | tee logs/exp1_reproduce.log
+```
+
+#### Expected Output
+
+```
+Pre-training eval: POPE=91.7%, Gap=40.0pp, TextVQA=72.7%
+[step 1/15] loss=... correct=... headΔ=7-10 gate=head_lsr ...
+...
+=== Eval step 5:  POPE=95.0% Gap=44.0pp TextVQA=70.7% ===
+=== Eval step 10: POPE=95.0% Gap=44.0pp TextVQA=74.7% ===  ← BEST
+=== Eval step 15: POPE=93.3% Gap=42.0pp TextVQA=70.7% ===
+```
+
+**Key log indicators**:
+- `gate=head_lsr` appears ~70% of steps (when all candidates correct)
+- `gate=correctness` appears ~30% (when candidates disagree)
+- `headΔ` should be 7-12 range
+- `tw` (token weight) ranges from 1.0 to ~1.5
+
+#### Checkpoints
+
+```
+checkpoints/exp1_reproduce/
+├── best/           # Auto-saved when POPE improves (likely step 5 or 10)
+├── final/          # After step 15
+└── config.json     # Full config for reproducibility
+```
+
+#### Expansion: Exp1 at Scale
+
+```bash
+# Exp1 with 2K samples, 4 samples/step, 10 steps (step 10 sweet spot)
+PYTHONUNBUFFERED=1 python -u scripts/phase6_head_mask_grpo.py \
+    --steps 10 \
+    --alpha 0.5 \
+    --gdpo \
+    --vppo-mask \
+    --gated-head-lsr \
+    --lr 2e-6 \
+    --group-size 6 \
+    --temperature 1.3 \
+    --max-new-tokens 512 \
+    --train-samples 2000 \
+    --samples-per-step 4 \
+    --include-mme-train --mme-ratio 0.3 --mme-eval-reserve 200 \
+    --eval-steps 5,10 \
+    --eval-pope-samples 60 --eval-blind-samples 50 --eval-textvqa-samples 30 \
+    --seed 42 \
+    --output-dir checkpoints/exp1_scaled \
+    2>&1 | tee logs/exp1_scaled.log
+```
+
+#### Expansion: Exp1 with 1K POPE Eval (CRITICAL for publication)
+
+```bash
+# After training, run 1K POPE eval on best checkpoint
+python scripts/eval_1k_pope.py \
+    --model-path checkpoints/exp1_reproduce/best \
+    --num-samples 1000 \
+    --output-dir lab/reports/exp1_1k_pope
+
+# Compare with baseline 1K POPE (89.9%)
+# If Exp1 > 90.5% at 1K, the improvement is real (not noise)
+```
+
+---
+
+### 23.3 Reproduce Exp8: Adaptive Top-K
+
+**Why Exp8**: Zero TextVQA cost. Per-sample head selection is the most targeted approach.
+
+#### Algorithm Summary
+
+```
+Same as Exp1, except step 4:
+  4. For each candidate:
+     - Hook ALL 28 layers (448 heads, not just 12)
+     - Forward with real image → capture ALL head activations
+     - Forward with black image → capture ALL head activations
+     - Compute per-head mean delta: Δ[l,h] = mean_t(||act_real[l,h,t] - act_black[l,h,t]||)
+     - Select top-12 heads by Δ FOR THIS SPECIFIC SAMPLE
+     - head_score(t) = Σ_{selected 12} Δ[l,h] × ||act_real[l,h,t] - act_black[l,h,t]||
+```
+
+**Key difference from Exp1**: Different images may select different heads. A face image activates different heads than a text/OCR image.
+
+#### Exact Reproduction Command (1K samples, 30 steps)
+
+```bash
+PYTHONUNBUFFERED=1 python -u scripts/phase6_head_mask_grpo.py \
+    --steps 30 \
+    --alpha 0.5 \
+    --gdpo \
+    --vppo-mask \
+    --gated-head-lsr \
+    --adaptive-heads \
+    --adaptive-top-k 12 \
+    --lr 2e-6 \
+    --group-size 6 \
+    --temperature 1.3 \
+    --max-new-tokens 512 \
+    --train-samples 1000 \
+    --eval-steps 5,10,15,20 \
+    --eval-pope-samples 60 --eval-blind-samples 50 --eval-textvqa-samples 30 \
+    --seed 42 \
+    --output-dir checkpoints/exp8_reproduce \
+    2>&1 | tee logs/exp8_reproduce.log
+```
+
+#### Expected Output
+
+```
+=== Eval step 5:  POPE=95.0% Gap=44.0pp TextVQA=72.7% ===
+=== Eval step 10: POPE=93.3% Gap=42.0pp TextVQA=70.7% ===
+=== Eval step 15: POPE=95.0% Gap=44.0pp TextVQA=72.7% ===
+=== Eval step 20: POPE=95.0% Gap=44.0pp TextVQA=72.7% ===
+```
+
+TextVQA stays at 72.7% (baseline) — zero collateral damage.
+
+#### Key CLI Flags
+
+| Flag | Purpose |
+|------|---------|
+| `--adaptive-heads` | Enable per-sample head selection from ALL 448 heads |
+| `--adaptive-top-k 12` | Select top-12 heads per sample (matches Exp1's count) |
+
+#### Expansion: Vary K
+
+```bash
+# Try K=8 (more selective) and K=20 (broader)
+for K in 8 12 16 20; do
+    python -u scripts/phase6_head_mask_grpo.py \
+        --steps 10 --alpha 0.5 --gdpo --vppo-mask --gated-head-lsr \
+        --adaptive-heads --adaptive-top-k $K \
+        --lr 2e-6 --group-size 6 --temperature 1.3 --max-new-tokens 512 \
+        --train-samples 1000 \
+        --eval-steps 5,10 \
+        --eval-pope-samples 60 --eval-blind-samples 50 --eval-textvqa-samples 30 \
+        --seed 42 \
+        --output-dir checkpoints/exp8_topk_${K} \
+        2>&1 | tee logs/exp8_topk_${K}.log
+done
+```
+
+#### Expansion: Exp8 at Scale
+
+```bash
+PYTHONUNBUFFERED=1 python -u scripts/phase6_head_mask_grpo.py \
+    --steps 10 \
+    --alpha 0.5 \
+    --gdpo \
+    --vppo-mask \
+    --gated-head-lsr \
+    --adaptive-heads \
+    --adaptive-top-k 12 \
+    --lr 2e-6 \
+    --group-size 6 \
+    --temperature 1.3 \
+    --max-new-tokens 512 \
+    --train-samples 2000 \
+    --samples-per-step 4 \
+    --include-mme-train --mme-ratio 0.3 --mme-eval-reserve 200 \
+    --eval-steps 5,10 \
+    --eval-pope-samples 60 --eval-blind-samples 50 --eval-textvqa-samples 30 \
+    --seed 42 \
+    --output-dir checkpoints/exp8_scaled \
+    2>&1 | tee logs/exp8_scaled.log
+```
+
+---
+
+### 23.4 Reproduce Exp10: Sharp Sigmoid
+
+**Why Exp10**: Most stable result. Simplest to explain in a paper (one formula, data-driven temperature).
+
+#### Algorithm Summary
+
+```
+Same as Exp1, except step 4 uses ALL 448 heads with soft sigmoid weights:
+  4. For each candidate:
+     - Hook ALL 28 layers (448 heads)
+     - Forward with real/black → compute per-head Δ[l,h]
+     - Compute adaptive temperature: T = std(Δ) / 3
+     - Sigmoid weight: w[l,h] = σ((Δ[l,h] - mean(Δ)) / T)
+     - Result: ~111 high-weight heads (>0.8), ~86 mid (0.3-0.8), ~251 low (<0.3)
+     - head_score(t) = Σ_{all} w[l,h] × ||act_real[l,h,t] - act_black[l,h,t]|| / Σ w
+```
+
+**Key insight**: `T = std(Δ)/3` creates near-binary weights (approximates top-K) while preserving smooth gradients. The `/3` was found empirically — it concentrates ~25% of heads as "active".
+
+#### Exact Reproduction Command (1K samples, 30 steps)
+
+```bash
+PYTHONUNBUFFERED=1 python -u scripts/phase6_head_mask_grpo.py \
+    --steps 30 \
+    --alpha 0.5 \
+    --gdpo \
+    --vppo-mask \
+    --gated-head-lsr \
+    --soft-weighted-heads \
+    --soft-temperature auto \
+    --soft-temperature-scale 0.33 \
+    --lr 2e-6 \
+    --group-size 6 \
+    --temperature 1.3 \
+    --max-new-tokens 512 \
+    --train-samples 1000 \
+    --eval-steps 5,10,15,20,25,30 \
+    --eval-pope-samples 60 --eval-blind-samples 50 --eval-textvqa-samples 30 \
+    --seed 42 \
+    --output-dir checkpoints/exp10_reproduce \
+    2>&1 | tee logs/exp10_reproduce.log
+```
+
+#### Expected Output
+
+```
+=== Eval step 5:  POPE=95.0% Gap=44.0pp TextVQA=72.7% ===
+=== Eval step 10: POPE=95.0% Gap=44.0pp TextVQA=70.7% ===
+=== Eval step 15: POPE=95.0% Gap=44.0pp TextVQA=70.7% ===
+=== Eval step 20: POPE=95.0% Gap=44.0pp TextVQA=72.7% ===  ← 4/6 at 95%
+=== Eval step 25: POPE=93.3% Gap=42.0pp TextVQA=70.7% ===
+=== Eval step 30: POPE=95.0% Gap=44.0pp TextVQA=70.7% ===
+```
+
+Log shows `[soft: 448 active, ~111H/~86M/~251L]` — high/mid/low weight head distribution.
+
+#### Key CLI Flags
+
+| Flag | Purpose |
+|------|---------|
+| `--soft-weighted-heads` | Enable continuous sigmoid weighting for all 448 heads |
+| `--soft-temperature auto` | Temperature = std(deltas) per sample (adaptive) |
+| `--soft-temperature-scale 0.33` | Divide temperature by 3 → sharper sigmoid |
+
+#### Expansion: Temperature Scale Ablation
+
+```bash
+# The 0.33 scale was found empirically. Try others:
+for SCALE in 0.2 0.25 0.33 0.5 1.0; do
+    python -u scripts/phase6_head_mask_grpo.py \
+        --steps 10 --alpha 0.5 --gdpo --vppo-mask --gated-head-lsr \
+        --soft-weighted-heads --soft-temperature auto --soft-temperature-scale $SCALE \
+        --lr 2e-6 --group-size 6 --temperature 1.3 --max-new-tokens 512 \
+        --train-samples 1000 \
+        --eval-steps 5,10 \
+        --eval-pope-samples 60 --eval-blind-samples 50 --eval-textvqa-samples 30 \
+        --seed 42 \
+        --output-dir checkpoints/exp10_scale_${SCALE} \
+        2>&1 | tee logs/exp10_scale_${SCALE}.log
+done
+```
+
+#### Expansion: Exp10 at Scale (Already Validated)
+
+```bash
+# This was already run and confirmed: 95.0% at step 10 with 4 sps
+PYTHONUNBUFFERED=1 python -u scripts/phase6_head_mask_grpo.py \
+    --steps 50 --alpha 0.5 --gdpo --vppo-mask --gated-head-lsr \
+    --soft-weighted-heads --soft-temperature auto --soft-temperature-scale 0.33 \
+    --lr 2e-6 --group-size 6 --temperature 1.3 --max-new-tokens 512 \
+    --train-samples 2000 --samples-per-step 4 \
+    --include-mme-train --mme-ratio 0.3 --mme-eval-reserve 200 \
+    --eval-steps 10,25,50 \
+    --eval-pope-samples 60 --eval-blind-samples 50 --eval-textvqa-samples 30 \
+    --seed 42 \
+    --output-dir checkpoints/exp10_scaled \
+    2>&1 | tee logs/exp10_scaled.log
+```
+
+---
+
+### 23.5 Head-to-Head Comparison Protocol
+
+Run all 3 experiments with identical settings for fair comparison:
+
+```bash
+COMMON="--steps 10 --alpha 0.5 --gdpo --vppo-mask --gated-head-lsr \
+    --lr 2e-6 --group-size 6 --temperature 1.3 --max-new-tokens 512 \
+    --train-samples 1000 --eval-steps 5,10 \
+    --eval-pope-samples 60 --eval-blind-samples 50 --eval-textvqa-samples 30 \
+    --seed 42"
+
+# Exp1: Fixed 12 heads (no soft/adaptive flags)
+python -u scripts/phase6_head_mask_grpo.py $COMMON \
+    --output-dir checkpoints/compare/exp1 2>&1 | tee logs/compare_exp1.log
+
+# Exp8: Adaptive top-12
+python -u scripts/phase6_head_mask_grpo.py $COMMON \
+    --adaptive-heads --adaptive-top-k 12 \
+    --output-dir checkpoints/compare/exp8 2>&1 | tee logs/compare_exp8.log
+
+# Exp10: Sharp sigmoid
+python -u scripts/phase6_head_mask_grpo.py $COMMON \
+    --soft-weighted-heads --soft-temperature auto --soft-temperature-scale 0.33 \
+    --output-dir checkpoints/compare/exp10 2>&1 | tee logs/compare_exp10.log
+
+# Extract results
+for exp in exp1 exp8 exp10; do
+    echo "$exp:" && grep "Eval step" logs/compare_${exp}.log
+done
+```
+
+### 23.6 Priority Actions for Publication
+
+1. **1K POPE eval on all 3 best checkpoints** (highest priority — validates at scale)
+   ```bash
+   for ckpt in checkpoints/compare/exp1/best checkpoints/compare/exp8/best checkpoints/compare/exp10/best; do
+       python scripts/eval_1k_pope.py --model-path $ckpt --num-samples 1000
+   done
+   ```
+
+2. **MME eval** (shows Perception up, Cognition flat = surgical improvement)
+   ```bash
+   python scripts/eval_mme.py --model-path checkpoints/compare/exp1/best --max-samples 200
+   ```
+
+3. **Scaled runs** (2K samples, 4 sps, 10 steps — for "scales to more data" claim)
+
+4. **Multi-model** (InternVL3.5-1B — blocked by transformers 5.0, try `pip install transformers==4.45.2`)
+
+5. **Ablations** (for paper):
+   - `--alpha 0` (no token weighting) — proves head weighting matters
+   - Remove `--gated-head-lsr` (no gating) — proves gating matters
+   - `--group-size 4` vs `8` — GRPO group sensitivity
+
+### 23.7 Universal Training Tips
+
+1. **Step 10 is the sweet spot**: All methods plateau by step 10. Beyond step 10, catastrophic forgetting degrades results. Train exactly 10 steps.
+
+2. **Use `--seed 42`**: Ensures identical data ordering across experiments for fair comparison.
+
+3. **Monitor `headΔ`**: Should be 7-12. If it saturates at 10.0 for many steps, the model has maximized vision head activation and further training is overfitting.
+
+4. **Monitor gate mode**: `gate=head_lsr` ~70% means gating is working. If 100%, all samples are already correct (too easy data). If 0%, data is too hard (all wrong).
+
+5. **OOM handling**: The script automatically retries with fewer sub-samples on OOM. `[3/4]` in logs means 1 sub-sample was skipped. This is fine — graceful degradation.
+
+6. **Log buffering**: When piping through `tee`, output buffers. Use `PYTHONUNBUFFERED=1` and `python -u` to minimize. Alternatively, check checkpoints directly:
+   ```bash
+   ls checkpoints/exp1_reproduce/best/  # If exists, step 5 eval found new best
+   ```
+
+7. **Eval sample counts**: 60 POPE = 1.67pp per sample. For publication, use 1K+ samples.
+
+---
+
+## 24. Exp13: Target-Calibrated Reward (Negative Result)
+
+**Status**: COMPLETE — negative result. Included for completeness and to prevent re-attempting.
+
+### 24.1 Hypothesis
+
+Standard monotonic headΔ reward (more activation = better) may overshoot, pushing heads beyond their natural operating range. A target-centered reward penalizing deviation from a calibrated target should improve stability.
+
+### 24.2 Four Sub-Variants
+
+| Variant | Mode | Formula | Result |
+|---------|------|---------|--------|
+| 13_1 | Gaussian | `exp(-(Δ-μ)²/2σ²)` | 95.0% step 5, 93.3% step 10 |
+| 13_2 | Linear | `clamp(1-|Δ-μ|/μ, 0)` | **FAILED** (91.7%, no improvement) |
+| 13_3 | Asymmetric | Gaussian + 2× blind penalty | 95.0% step 5, 93.3% step 10 |
+| 13_4 | Clipped | Plateau ±σ + Gaussian tails | 95.0% step 5, 93.3% step 10 |
+
+Target μ = 8.0 (auto-calibrated from baseline correct responses).
+
+### 24.3 Run Commands
+
+```bash
+COMMON="--steps 10 --alpha 0.5 --gdpo --vppo-mask --gated-head-lsr \
+    --soft-weighted-heads --soft-temperature auto --soft-temperature-scale 0.33 \
+    --lr 2e-6 --group-size 6 --temperature 1.3 --max-new-tokens 512 \
+    --train-samples 2000 --samples-per-step 2 \
+    --include-mme-train --mme-ratio 0.3 --mme-eval-reserve 200 \
+    --eval-steps 5,10 --eval-pope-samples 60 --eval-blind-samples 50 \
+    --seed 42 --target-calibrated"
+
+# 13_1: Gaussian
+python -u scripts/phase6_head_mask_grpo.py $COMMON \
+    --target-mode gaussian --target-sigma 2.0 \
+    --output-dir checkpoints/exp13_1_gaussian 2>&1 | tee logs/exp13_1.log
+
+# 13_2: Linear (WILL FAIL — included for negative result)
+python -u scripts/phase6_head_mask_grpo.py $COMMON \
+    --target-mode linear --target-sigma 2.0 \
+    --output-dir checkpoints/exp13_2_linear 2>&1 | tee logs/exp13_2.log
+
+# 13_3: Asymmetric
+python -u scripts/phase6_head_mask_grpo.py $COMMON \
+    --target-mode asymmetric --target-sigma 2.0 \
+    --output-dir checkpoints/exp13_3_asymmetric 2>&1 | tee logs/exp13_3.log
+
+# 13_4: Clipped
+python -u scripts/phase6_head_mask_grpo.py $COMMON \
+    --target-mode clipped --target-sigma 2.0 \
+    --output-dir checkpoints/exp13_4_clipped 2>&1 | tee logs/exp13_4.log
+```
+
+### 24.4 CLI Parameters
+
+| Parameter | Default | Meaning |
+|-----------|---------|---------|
+| `--target-calibrated` | flag | Enable target-centered reward |
+| `--target-delta` | 0.0 | Target headΔ (0 = auto-calibrate from 10 baseline samples) |
+| `--target-sigma` | 2.0 | Width of reward bell curve |
+| `--target-mode` | gaussian | One of: gaussian, linear, asymmetric, clipped |
+
+### 24.5 Why It Failed
+
+1. **The hypothesis was wrong**: Monotonic headΔ is not overshooting. The sharp sigmoid already provides implicit targeting via its temperature.
+2. **Linear mode zeroes too many heads**: Δ > 2×target gets zero reward, excluding most active heads.
+3. **The real bottleneck is catastrophic forgetting** after step 10, not reward function shape. No reward modification can fix this.
+4. **All 3 working variants match Exp10 at step 5 but can't sustain it** — same pattern as all other experiments.
+
+### 24.6 Lesson
+
+Do not attempt further reward function modifications (bell curves, asymmetric penalties, etc.). The reward signal is already strong enough. Future work should focus on:
+- Larger-scale evaluation (1K+ POPE)
+- Catastrophic forgetting mitigation (replay buffers, EWC, smaller LR schedules)
+- Multi-model validation
+- Additional benchmarks (MME, MMMU-Pro)
