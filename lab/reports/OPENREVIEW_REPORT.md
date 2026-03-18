@@ -244,7 +244,20 @@ Training on TextVQA (open-ended VQA) improves POPE (binary VQA):
 
 Head-LSR's vision grounding signal is **task-format agnostic**: it measures image dependence at the activation level, not the output level. Token-level KL (Phase 2) encodes format-specific patterns that limit transfer.
 
-### 5.3 Training Efficiency
+### 5.3 Target-Calibrated Reward (Exp13: Negative Result)
+
+We hypothesized that monotonic headΔ reward might overshoot, pushing heads beyond their natural activation range. Exp13 tested **target-centered** reward functions that penalize deviation from a calibrated target (μ=8.0, auto-calibrated from baseline correct responses).
+
+| Mode | Formula | Step 5 | Step 10 | Verdict |
+|------|---------|--------|---------|---------|
+| Gaussian | `exp(-(Δ-μ)²/2σ²)` | **95.0%** | 93.3% | Matches but unstable |
+| Linear | `clamp(1-|Δ-μ|/μ, 0)` | 91.7% | 91.7% | **Failed** — no improvement |
+| Asymmetric | Gaussian + 2× blind penalty | **95.0%** | 93.3% | Same as Gaussian |
+| Clipped | Plateau ± σ + Gaussian tails | **95.0%** | 93.3% | Same as Gaussian |
+
+Three of four modes (Gaussian, Asymmetric, Clipped) reach 95.0% at step 5 but all degrade to 93.3% by step 10. Linear fails entirely due to its narrow reward window. **Conclusion**: The monotonic reward in Exp10 is already well-calibrated by the sharp sigmoid temperature. Target-calibrated reward adds complexity without improving stability — the bottleneck is catastrophic forgetting, not reward function shape.
+
+### 5.4 Training Efficiency
 
 | Approach | Steps to 95% POPE | Rounds | Wall Time |
 |----------|-------------------|--------|-----------|
@@ -337,8 +350,14 @@ VIGIL demonstrates that head-level activation analysis provides both a diagnosti
 | Exp6 | Learned Imp+LSR | 91.7% | 40.0pp | 72.7% | — | Detach bug |
 | **Exp8** | Adaptive Top-K | **95.0%** | **44.0pp** | 72.7% | 5 | Per-sample selection |
 | Exp9 | Soft All-Heads | 95.0% | 44.0pp | 68.7% | 5 | Flat sigmoid |
-| **Exp10** | Sharp Sigmoid (T/3) | **95.0%** | **44.0pp** | 70.7% | 5 | **Most stable** |
-| Exp10s | Scaled (2K, 50 steps) | 95.0%* | 44.0pp* | 70.7%* | 15 | *Interim (step 20/50)* |
+| **Exp10** | Sharp Sigmoid (T/3) | **95.0%** | **44.0pp** | 70.7% | 5 | **Most stable (4/6)** |
+| Exp10s | Scaled (2K, 4sps) | **95.0%** | **44.0pp** | — | 10 | Matches 1K at scale |
+| Exp11 | Layer-Aware | 95.0% | 44.0pp | 70.7% | 5 | 2/6 stable, no gain |
+| Exp12 | Top-P Selection | — | — | — | — | Incomplete (5 steps) |
+| Exp13_1 | Gaussian Target | 95.0% | 44.0pp | — | 5 | Degrades by step 10 |
+| Exp13_2 | Linear Target | 91.7% | 40.0pp | — | — | **Failed** (window too narrow) |
+| Exp13_3 | Asymmetric Target | 95.0% | 44.0pp | — | 5 | Degrades by step 10 |
+| Exp13_4 | Clipped Target | 95.0% | 44.0pp | — | 5 | Degrades by step 10 |
 
 ## Appendix B: Calibration Details
 

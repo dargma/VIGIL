@@ -17,3 +17,28 @@ exp4_headkl_s15	HeadMaskingKL	15	90.0	38.0	72.7	No improvement, KL signal too we
 exp5_learned_kl	LearnedImp+KL	15	90.0	38.0	72.7	All steps SKIP, soft KL=0, FAILED	2026-03-15
 exp6_learned_lsr_s5	LearnedImp+LSR	5	91.7	40.0	72.7	Matches baseline, imp not updating	2026-03-15
 exp6_learned_lsr_s15	LearnedImp+LSR	15	90.0	38.0	70.7	Degraded, importance frozen (detach bug)	2026-03-15
+exp8_adaptive_s5	AdaptiveTopK	5	95.0	44.0	72.7	Exp8: per-sample top-12 heads	2026-03-16
+exp8_adaptive_s10	AdaptiveTopK	10	93.3	42.0	70.7	Exp8 step 10 dip	2026-03-16
+exp8_adaptive_s15	AdaptiveTopK	15	95.0	44.0	72.7	Exp8 step 15 recovery	2026-03-16
+exp8_adaptive_s20	AdaptiveTopK	20	95.0	44.0	72.7	Exp8 step 20 sustained	2026-03-16
+exp9_soft_all_s5	SoftAllHeads	5	95.0	44.0	72.7	Exp9: flat sigmoid all 448	2026-03-16
+exp9_soft_all_s10	SoftAllHeads	10	93.3	42.0	70.7	Exp9 degrades	2026-03-16
+exp9_soft_all_s30	SoftAllHeads	30	93.3	42.0	68.7	Exp9 final: TextVQA -4pp	2026-03-16
+exp10_sharp_s5	SharpSigmoid	5	95.0	44.0	72.7	Exp10: T=std/3, BEST STABILITY	2026-03-16
+exp10_sharp_s10	SharpSigmoid	10	95.0	44.0	70.7	Exp10 sustained	2026-03-16
+exp10_sharp_s15	SharpSigmoid	15	95.0	44.0	72.7	Exp10 sustained	2026-03-16
+exp10_sharp_s20	SharpSigmoid	20	93.3	42.0	70.7	Exp10 minor dip	2026-03-16
+exp10_sharp_s30	SharpSigmoid	30	95.0	44.0	70.7	Exp10 recovers	2026-03-16
+exp10_scaled_v6_s10	SharpSigmoid_2K	10	95.0	44.0	-	Exp10 scaled 4sps, matches 1K	2026-03-17
+exp11_layer_s5	LayerAware	5	95.0	44.0	72.7	Exp11: decision 2x, feature 1.5x	2026-03-17
+exp11_layer_s10	LayerAware	10	93.3	42.0	70.7	Exp11 no advantage	2026-03-17
+exp11_layer_s15	LayerAware	15	95.0	44.0	70.7	Exp11 recovers	2026-03-17
+exp11_layer_s30	LayerAware	30	91.7	40.0	72.7	Exp11 degrades to baseline	2026-03-17
+exp13_1_gaussian_s5	TargetGaussian	5	95.0	44.0	-	Exp13_1: bell-curve target	2026-03-18
+exp13_1_gaussian_s10	TargetGaussian	10	93.3	42.0	-	Exp13_1 degrades	2026-03-18
+exp13_2_linear_s5	TargetLinear	5	91.7	40.0	-	Exp13_2: V-shape FAILED	2026-03-18
+exp13_2_linear_s10	TargetLinear	10	91.7	40.0	-	Exp13_2 no improvement	2026-03-18
+exp13_3_asym_s5	TargetAsymmetric	5	95.0	44.0	-	Exp13_3: 2x blind penalty, best saved	2026-03-18
+exp13_3_asym_s10	TargetAsymmetric	10	93.3	42.0	-	Exp13_3 degrades	2026-03-18
+exp13_4_clipped_s5	TargetClipped	5	95.0	44.0	-	Exp13_4: plateau+tails	2026-03-18
+exp13_4_clipped_s10	TargetClipped	10	93.3	42.0	-	Exp13_4 degrades	2026-03-18
