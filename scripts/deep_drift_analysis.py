@@ -163,14 +163,15 @@ def aggregate_real_curves(data, model_key):
 
 def fig1_enhanced_drift(real_data=None):
     """
-    Enhanced version of the core Figure 1: Vision Attention Drift.
-    Shows baseline O(1/L) decay vs VIGIL sustained activation,
-    with annotated mechanism explanations.
+    Figure 1: Vision Head Activation During Generation.
 
-    If real_data is provided, uses actual GPU-measured activations.
-    Otherwise falls back to simulation.
+    Shows real GPU-measured activation Δ (real - black image) across token
+    positions for baseline and VIGIL Exp10. Honestly represents the data:
+    - Short POPE responses (~37 tokens) show increasing then declining delta
+    - Baseline and Exp10 are similar at this length
+    - Feature heads (L23+) dominate; decision heads (L0-5) are much weaker
     """
-    print("[fig1] Enhanced Vision Attention Drift...")
+    print("[fig1] Vision Head Activation During Generation...")
     np.random.seed(42)
 
     use_real = False
@@ -182,82 +183,46 @@ def fig1_enhanced_drift(real_data=None):
             print("  Using REAL GPU-measured activation data")
 
     if use_real:
-        # Normalize to [0, 1] range for visualization
-        all_vals = np.concatenate([bl_mean[~np.isnan(bl_mean)], vg_mean[~np.isnan(vg_mean)]])
-        vmax = np.percentile(all_vals, 95) if len(all_vals) > 0 else 1.0
-        vmax = max(vmax, 1e-6)
-
         n_tokens = min(len(bl_mean), len(vg_mean))
         t = np.arange(n_tokens)
-        baseline = bl_mean[:n_tokens] / vmax
-        vigil = vg_mean[:n_tokens] / vmax
-        baseline = np.clip(np.nan_to_num(baseline, nan=0.0), 0, 1)
-        vigil = np.clip(np.nan_to_num(vigil, nan=0.0), 0, 1)
 
-        # Decision/feature curves
-        decision_baseline = np.clip(np.nan_to_num(bl_dec[:n_tokens] / vmax), 0, 1)
-        decision_vigil = np.clip(np.nan_to_num(vg_dec[:n_tokens] / vmax), 0, 1)
-        feature_baseline = np.clip(np.nan_to_num(bl_feat[:n_tokens] / vmax), 0, 1)
-        feature_vigil = np.clip(np.nan_to_num(vg_feat[:n_tokens] / vmax), 0, 1)
+        # Use raw scale (not normalized to [0,1]) for honest representation
+        baseline = bl_mean[:n_tokens]
+        vigil = vg_mean[:n_tokens]
 
-        # Estimate thinking boundary (approximate: 60% of tokens)
-        think_end = int(n_tokens * 0.6)
-        data_label = "Real GPU-measured activations"
+        decision_baseline = bl_dec[:n_tokens]
+        decision_vigil = vg_dec[:n_tokens]
+        feature_baseline = bl_feat[:n_tokens]
+        feature_vigil = vg_feat[:n_tokens]
+
+        data_label = "Real GPU-measured activations (10 samples averaged)"
+        mean_tokens = np.mean([s["n_tokens"] for s in real_data["baseline"]])
     else:
         print("  Using simulated data (run collect_real_data.py --task drift for real)")
-        n_tokens = 160
+        n_tokens = 40
         t = np.arange(n_tokens)
-        think_end = 100
-
-        baseline_think = 0.70 / (1 + 0.012 * t[:think_end])
-        baseline_answer = baseline_think[-1] * np.exp(-0.02 * np.arange(n_tokens - think_end))
-        baseline = np.concatenate([baseline_think, baseline_answer])
-        baseline += np.random.normal(0, 0.03, n_tokens)
-        baseline = np.clip(baseline, 0.05, 0.85)
-
-        vigil_base = 0.58
-        vigil_think = vigil_base + 0.04 * np.sin(0.05 * t[:think_end])
-        vigil_think += np.random.normal(0, 0.02, think_end)
-        vigil_answer_raw = np.concatenate([
-            np.linspace(vigil_base - 0.05, vigil_base - 0.08, 10),
-            np.linspace(vigil_base - 0.06, vigil_base - 0.02, n_tokens - think_end - 10),
-        ])
-        vigil_answer = vigil_answer_raw + np.random.normal(0, 0.025, n_tokens - think_end)
-        vigil = np.concatenate([vigil_think, vigil_answer])
-        vigil = np.clip(vigil, 0.1, 0.80)
-
-        # Simulated decision/feature head curves
-        decision_baseline = 0.9 * np.exp(-0.015 * t) + np.random.normal(0, 0.03, n_tokens)
-        decision_vigil = 0.75 + 0.05 * np.sin(0.04 * t) + np.random.normal(0, 0.03, n_tokens)
-        feature_baseline = 0.5 * np.exp(-0.008 * t) + np.random.normal(0, 0.02, n_tokens)
-        feature_vigil = 0.55 + np.random.normal(0, 0.025, n_tokens)
-        decision_baseline = np.clip(decision_baseline, 0, 1)
-        decision_vigil = np.clip(decision_vigil, 0, 1)
-        feature_baseline = np.clip(feature_baseline, 0, 1)
-        feature_vigil = np.clip(feature_vigil, 0, 1)
+        baseline = 0.3 + 0.5 * np.sin(np.pi * t / n_tokens) + np.random.normal(0, 0.05, n_tokens)
+        vigil = 0.3 + 0.55 * np.sin(np.pi * t / n_tokens) + np.random.normal(0, 0.05, n_tokens)
+        baseline = np.clip(baseline, 0, None)
+        vigil = np.clip(vigil, 0, None)
+        decision_baseline = baseline * 0.05
+        decision_vigil = vigil * 0.05
+        feature_baseline = baseline * 0.95
+        feature_vigil = vigil * 0.95
         data_label = "Simulated (run collect_real_data.py for real)"
+        mean_tokens = 37
 
-    # Smoothed versions for trend lines
-    baseline_smooth = uniform_filter1d(baseline, size=7)
-    vigil_smooth = uniform_filter1d(vigil, size=7)
+    # Smoothed trend lines
+    smooth_size = min(5, max(3, n_tokens // 8))
+    baseline_smooth = uniform_filter1d(baseline, size=smooth_size)
+    vigil_smooth = uniform_filter1d(vigil, size=smooth_size)
 
     # === Create figure ===
     fig = plt.figure(figsize=(16, 10))
     gs = gridspec.GridSpec(2, 1, height_ratios=[3, 1.2], hspace=0.25)
 
-    # --- Top panel: Main drift curves ---
+    # --- Top panel: Main activation curves ---
     ax1 = fig.add_subplot(gs[0])
-
-    # Phase backgrounds
-    ax1.axvspan(0, think_end, alpha=0.08, color='steelblue', label='_nolegend_')
-    ax1.axvspan(think_end, n_tokens, alpha=0.08, color='salmon', label='_nolegend_')
-    ax1.axvline(think_end, color='gray', linestyle='--', linewidth=1.5, alpha=0.7)
-
-    # Phase labels
-    ax1.text(think_end/2, 0.82, 'Thinking Phase\n<think>...', ha='center',
-             fontsize=11, color='steelblue', alpha=0.7, style='italic')
-    ax1.text(think_end + (n_tokens - think_end)/2, 0.82, 'Answer Phase\n...</think> answer',
-             ha='center', fontsize=11, color='indianred', alpha=0.7, style='italic')
 
     # Raw data (light)
     ax1.plot(t, baseline, color='#ff6b6b', alpha=0.25, linewidth=0.8)
@@ -265,87 +230,86 @@ def fig1_enhanced_drift(real_data=None):
 
     # Smoothed trend lines (bold)
     ax1.plot(t, baseline_smooth, color='#e03131', linewidth=2.5,
-             label='Baseline (Visual Drift)', zorder=5)
+             label='Baseline (HF Thinking)', zorder=5)
     ax1.plot(t, vigil_smooth, color='#2b8a3e', linewidth=2.5,
-             label='VIGIL Exp10 (Sustained)', zorder=5)
+             label='VIGIL Exp10', zorder=5)
 
-    # O(1/L) reference curve
-    ref_curve = 0.70 / (1 + 0.012 * t)
-    ref_end = min(120, n_tokens)
-    ax1.plot(t[:ref_end], ref_curve[:ref_end], 'k--', alpha=0.3, linewidth=1,
-             label='O(1/L) reference')
+    # Find where curves diverge most
+    diff = vigil_smooth - baseline_smooth
+    max_diff_idx = int(np.argmax(np.abs(diff)))
+    peak_idx = int(np.argmax(baseline_smooth))
 
-    # Annotate the drift — use proportional positions
-    ann_pos = min(int(n_tokens * 0.5), n_tokens - 1)
-    ann_text_x = min(int(n_tokens * 0.6), n_tokens - 1)
-    y_range = max(float(np.nanmax(vigil_smooth)), float(np.nanmax(baseline_smooth)), 0.5)
+    # Annotate peak
+    ax1.annotate(f'Peak activation\n(token {peak_idx})',
+                xy=(peak_idx, baseline_smooth[peak_idx]),
+                xytext=(peak_idx - 8, baseline_smooth[peak_idx] + 0.15),
+                fontsize=10, color='gray',
+                arrowprops=dict(arrowstyle='->', color='gray', lw=1.5),
+                bbox=dict(boxstyle='round,pad=0.3', facecolor='lightyellow', alpha=0.8))
 
-    ax1.annotate('O(1/L) decay\n"blind reasoner"',
-                xy=(ann_pos, baseline_smooth[ann_pos]),
-                xytext=(ann_text_x, y_range * 0.7),
-                fontsize=10, color='#e03131', fontweight='bold',
-                arrowprops=dict(arrowstyle='->', color='#e03131', lw=1.5),
-                bbox=dict(boxstyle='round,pad=0.3', facecolor='#ffe3e3', alpha=0.8))
+    # Annotate late-sequence difference if meaningful
+    late_start = int(n_tokens * 0.75)
+    late_bl = np.mean(baseline_smooth[late_start:])
+    late_vg = np.mean(vigil_smooth[late_start:])
+    late_diff = late_vg - late_bl
+    if abs(late_diff) > 0.01:
+        mid_late = int((late_start + n_tokens) / 2)
+        mid_late = min(mid_late, n_tokens - 1)
+        color = '#2b8a3e' if late_diff > 0 else '#e03131'
+        ax1.annotate(f'Late tokens: Δ={late_diff:+.2f}',
+                    xy=(mid_late, vigil_smooth[mid_late]),
+                    xytext=(mid_late - 10, max(late_bl, late_vg) + 0.2),
+                    fontsize=10, color=color, fontweight='bold',
+                    arrowprops=dict(arrowstyle='->', color=color, lw=1.5),
+                    bbox=dict(boxstyle='round,pad=0.3',
+                             facecolor='#d8f5a2' if late_diff > 0 else '#ffe3e3',
+                             alpha=0.8))
 
-    ax1.annotate('Sustained grounding\n"visually anchored"',
-                xy=(ann_pos, vigil_smooth[ann_pos]),
-                xytext=(int(n_tokens * 0.3), y_range * 0.95),
-                fontsize=10, color='#2b8a3e', fontweight='bold',
-                arrowprops=dict(arrowstyle='->', color='#2b8a3e', lw=1.5),
-                bbox=dict(boxstyle='round,pad=0.3', facecolor='#d8f5a2', alpha=0.8))
-
-    # Answer phase annotation (only if think_end is within range)
-    if think_end + 15 < n_tokens and think_end + 35 < n_tokens:
-        ax1.annotate('Critical: vision needed\nfor final answer',
-                    xy=(think_end + 15, 0.15), xytext=(think_end + 35, 0.30),
-                    fontsize=9, color='gray',
-                    arrowprops=dict(arrowstyle='->', color='gray', lw=1),
-                    bbox=dict(boxstyle='round', facecolor='lightyellow', alpha=0.8))
-
-    # Delta annotation
-    mid = max(think_end - 20, int(n_tokens * 0.3))
-    mid = min(mid, n_tokens - 1)
-    delta_y = vigil_smooth[mid] - baseline_smooth[mid]
-    if abs(baseline_smooth[mid]) > 1e-6:
-        ax1.annotate('', xy=(mid, vigil_smooth[mid]), xytext=(mid, baseline_smooth[mid]),
-                    arrowprops=dict(arrowstyle='<->', color='purple', lw=2))
-        ax1.text(mid + 2, (vigil_smooth[mid] + baseline_smooth[mid]) / 2,
-                f'Δ = {delta_y:.2f}\n(+{delta_y/baseline_smooth[mid]*100:.0f}%)',
-                fontsize=10, color='purple', fontweight='bold',
-                bbox=dict(facecolor='#f3d9fa', alpha=0.8, boxstyle='round'))
-
-    ax1.set_ylabel('Mean Vision Head Activation (Δ)', fontsize=13)
+    y_max = max(float(np.nanmax(baseline)), float(np.nanmax(vigil))) * 1.2
+    ax1.set_ylabel('Mean Vision Head Activation Δ\n(real image − black image)', fontsize=13)
     ax1.set_xlabel('Token Position in Generation Sequence', fontsize=13)
-    ax1.set_title('Vision Attention Drift: Baseline vs VIGIL-Trained Model\n'
-                  'Head-level activation differential (real image - black image)',
-                  fontsize=14, fontweight='bold')
-    ax1.legend(loc='upper right', fontsize=11, framealpha=0.9)
-    ax1.set_xlim(0, n_tokens)
-    ax1.set_ylim(0, max(0.88, float(np.nanmax(vigil_smooth)) * 1.3))
-    ax1.text(0.02, 0.02, f'Data: {data_label}', transform=ax1.transAxes,
-             fontsize=8, color='gray', alpha=0.7)
+    ax1.set_title(
+        'Vision Head Activation During POPE Generation\n'
+        f'Mean across 12 calibrated heads, {int(mean_tokens)}-token responses (greedy, thinking mode)',
+        fontsize=14, fontweight='bold')
+    ax1.legend(loc='upper left', fontsize=11, framealpha=0.9)
+    ax1.set_xlim(0, n_tokens - 1)
+    ax1.set_ylim(0, y_max)
+    ax1.text(0.98, 0.02, f'{data_label}', transform=ax1.transAxes,
+             fontsize=8, color='gray', alpha=0.7, ha='right')
 
-    # --- Bottom panel: Per-head decomposition ---
+    # Note about short chains
+    ax1.text(0.98, 0.12,
+             'Note: Short POPE responses (~37 tokens).\n'
+             'O(1/L) drift applies to longer chains (100+ tokens).',
+             transform=ax1.transAxes, fontsize=9, color='gray',
+             ha='right', va='bottom', style='italic',
+             bbox=dict(facecolor='white', alpha=0.7, boxstyle='round'))
+
+    # --- Bottom panel: Decision vs Feature heads ---
     ax2 = fig.add_subplot(gs[1])
 
-    # Decision/feature curves already computed above (real or simulated)
-    decision_baseline_s = uniform_filter1d(decision_baseline, 7)
-    decision_vigil_s = uniform_filter1d(decision_vigil, 7)
-    feature_baseline_s = uniform_filter1d(feature_baseline, 7)
-    feature_vigil_s = uniform_filter1d(feature_vigil, 7)
+    dec_bl_s = uniform_filter1d(decision_baseline, smooth_size)
+    dec_vg_s = uniform_filter1d(decision_vigil, smooth_size)
+    feat_bl_s = uniform_filter1d(feature_baseline, smooth_size)
+    feat_vg_s = uniform_filter1d(feature_vigil, smooth_size)
 
-    ax2.fill_between(t, 0, decision_baseline_s, alpha=0.3, color='#ff6b6b', label='Decision heads (baseline)')
-    ax2.fill_between(t, 0, decision_vigil_s, alpha=0.3, color='#51cf66', label='Decision heads (VIGIL)')
-    ax2.plot(t, feature_baseline_s, '--', color='#ff6b6b', alpha=0.6, label='Feature heads (baseline)')
-    ax2.plot(t, feature_vigil_s, '--', color='#51cf66', alpha=0.6, label='Feature heads (VIGIL)')
+    ax2.plot(t, feat_bl_s, '-', color='#e03131', linewidth=2,
+             label='Feature heads L23+ (baseline)')
+    ax2.plot(t, feat_vg_s, '-', color='#2b8a3e', linewidth=2,
+             label='Feature heads L23+ (VIGIL)')
+    ax2.plot(t, dec_bl_s, '--', color='#e03131', linewidth=1.5, alpha=0.7,
+             label='Decision heads L0-5 (baseline)')
+    ax2.plot(t, dec_vg_s, '--', color='#2b8a3e', linewidth=1.5, alpha=0.7,
+             label='Decision heads L0-5 (VIGIL)')
 
-    ax2.axvline(think_end, color='gray', linestyle='--', linewidth=1, alpha=0.5)
-    ax2.set_ylabel('Head Type\nActivation', fontsize=11)
+    ax2.set_ylabel('Head Type Δ', fontsize=11)
     ax2.set_xlabel('Token Position', fontsize=11)
-    ax2.set_title('Decomposition: Decision Heads (L0-5) vs Feature Heads (L23-27)', fontsize=12)
-    ax2.legend(loc='upper right', fontsize=9, ncol=2)
-    ax2.set_xlim(0, n_tokens)
-    ax2.set_ylim(0, 1.05)
+    ax2.set_title(
+        'Feature Heads (L23+) dominate vision signal — Decision Heads (L0-5) are ~10× weaker',
+        fontsize=12)
+    ax2.legend(loc='upper left', fontsize=9, ncol=2)
+    ax2.set_xlim(0, n_tokens - 1)
 
     plt.savefig(OUT_DIR / "fig1_enhanced_vision_drift.png", dpi=200, bbox_inches='tight')
     plt.close()
