@@ -12,7 +12,7 @@ Uses actual training history data from Exp10 scaled_final run.
 Figures saved to lab/reports/deep_drift_analysis/
 """
 
-import json, os
+import json, os, argparse
 import numpy as np
 from scipy.ndimage import uniform_filter1d
 import matplotlib
@@ -85,52 +85,157 @@ VISION_HEADS = [
 
 
 # ══════════════════════════════════════════════════════════════════════
+#  Load real GPU-measured drift data (if available)
+# ══════════════════════════════════════════════════════════════════════
+
+def load_real_drift_data():
+    """Load real per-token activation data from collect_real_data.py."""
+    path = OUT_DIR / "real_drift_data.json"
+    if not path.exists():
+        return None
+    with open(path) as f:
+        data = json.load(f)
+    if not data.get("baseline") or not data.get("exp10"):
+        return None
+    print(f"[data] Loaded real drift data: {len(data['baseline'])} baseline, "
+          f"{len(data['exp10'])} exp10 samples")
+    return data
+
+
+def aggregate_real_curves(data, model_key):
+    """Aggregate per-token head deltas across samples into mean curves.
+
+    Returns:
+        mean_curve: [n_tokens] mean activation delta across all vision heads
+        per_head: {head_name: [n_tokens]} per-head curves
+        decision_curve: [n_tokens] mean of decision heads (L0-5)
+        feature_curve: [n_tokens] mean of feature heads (L23-27)
+    """
+    samples = data[model_key]
+    if not samples:
+        return None, None, None, None
+
+    # Find max token length across samples
+    max_tokens = max(
+        max(len(v) for v in s["head_deltas"].values()) if s["head_deltas"] else 0
+        for s in samples
+    )
+    if max_tokens == 0:
+        return None, None, None, None
+
+    # Collect per-head curves, padding with NaN
+    head_names = list(samples[0]["head_deltas"].keys())
+    all_curves = {h: [] for h in head_names}
+
+    for s in samples:
+        for h in head_names:
+            vals = s["head_deltas"].get(h, [])
+            padded = vals + [float('nan')] * (max_tokens - len(vals))
+            all_curves[h].append(padded)
+
+    # Average across samples (ignoring NaN)
+    per_head = {}
+    for h in head_names:
+        arr = np.array(all_curves[h])
+        per_head[h] = np.nanmean(arr, axis=0)
+
+    # Mean across all heads
+    all_head_arr = np.array([per_head[h] for h in head_names])
+    mean_curve = np.nanmean(all_head_arr, axis=0)
+
+    # Decision heads (L0-5) and feature heads (L23-27)
+    decision_heads = [h for h in head_names
+                      if int(h.split('H')[0][1:]) <= 5]
+    feature_heads = [h for h in head_names
+                     if int(h.split('H')[0][1:]) >= 23]
+
+    decision_curve = np.nanmean(
+        [per_head[h] for h in decision_heads], axis=0) if decision_heads else mean_curve
+    feature_curve = np.nanmean(
+        [per_head[h] for h in feature_heads], axis=0) if feature_heads else mean_curve
+
+    return mean_curve, per_head, decision_curve, feature_curve
+
+
+# ══════════════════════════════════════════════════════════════════════
 #  FIGURE 1: Enhanced Vision Attention Drift (the key figure)
 # ══════════════════════════════════════════════════════════════════════
 
-def fig1_enhanced_drift():
+def fig1_enhanced_drift(real_data=None):
     """
     Enhanced version of the core Figure 1: Vision Attention Drift.
     Shows baseline O(1/L) decay vs VIGIL sustained activation,
     with annotated mechanism explanations.
+
+    If real_data is provided, uses actual GPU-measured activations.
+    Otherwise falls back to simulation.
     """
     print("[fig1] Enhanced Vision Attention Drift...")
     np.random.seed(42)
 
-    # Generate realistic activation curves based on actual head_score data
-    # Baseline: O(1/L) decay pattern (from actual baseline measurements)
-    # - Starts at ~0.70 (first tokens get strong vision attention)
-    # - Decays as 0.70 / (1 + 0.015*t) with noise
-    # - Thinking phase: slow decay
-    # - Answer phase: sharper drop (model "forgets" image)
-    n_tokens = 160
-    t = np.arange(n_tokens)
+    use_real = False
+    if real_data is not None:
+        bl_mean, bl_heads, bl_dec, bl_feat = aggregate_real_curves(real_data, "baseline")
+        vg_mean, vg_heads, vg_dec, vg_feat = aggregate_real_curves(real_data, "exp10")
+        if bl_mean is not None and vg_mean is not None:
+            use_real = True
+            print("  Using REAL GPU-measured activation data")
 
-    # Thinking/Answer boundary
-    think_end = 100
+    if use_real:
+        # Normalize to [0, 1] range for visualization
+        all_vals = np.concatenate([bl_mean[~np.isnan(bl_mean)], vg_mean[~np.isnan(vg_mean)]])
+        vmax = np.percentile(all_vals, 95) if len(all_vals) > 0 else 1.0
+        vmax = max(vmax, 1e-6)
 
-    # BASELINE MODEL (unsteered, standard GRPO)
-    # Inspired by actual headΔ measurements: starts ~0.7, decays to ~0.2
-    baseline_think = 0.70 / (1 + 0.012 * t[:think_end])
-    baseline_answer = baseline_think[-1] * np.exp(-0.02 * np.arange(n_tokens - think_end))
-    baseline = np.concatenate([baseline_think, baseline_answer])
-    baseline += np.random.normal(0, 0.03, n_tokens)
-    baseline = np.clip(baseline, 0.05, 0.85)
+        n_tokens = min(len(bl_mean), len(vg_mean))
+        t = np.arange(n_tokens)
+        baseline = bl_mean[:n_tokens] / vmax
+        vigil = vg_mean[:n_tokens] / vmax
+        baseline = np.clip(np.nan_to_num(baseline, nan=0.0), 0, 1)
+        vigil = np.clip(np.nan_to_num(vigil, nan=0.0), 0, 1)
 
-    # VIGIL EXP10 MODEL (head-level reward training)
-    # Actual mean_head_score from training: ~7.9 (normalized to 0.5-0.6 range)
-    # Key: maintains activation through thinking, slight dip at boundary, recovers
-    vigil_base = 0.58
-    vigil_think = vigil_base + 0.04 * np.sin(0.05 * t[:think_end])  # slight oscillation
-    vigil_think += np.random.normal(0, 0.02, think_end)
-    # Slight dip at think→answer transition, then recovery
-    vigil_answer_raw = np.concatenate([
-        np.linspace(vigil_base - 0.05, vigil_base - 0.08, 10),  # brief dip
-        np.linspace(vigil_base - 0.06, vigil_base - 0.02, n_tokens - think_end - 10),  # recovery
-    ])
-    vigil_answer = vigil_answer_raw + np.random.normal(0, 0.025, n_tokens - think_end)
-    vigil = np.concatenate([vigil_think, vigil_answer])
-    vigil = np.clip(vigil, 0.1, 0.80)
+        # Decision/feature curves
+        decision_baseline = np.clip(np.nan_to_num(bl_dec[:n_tokens] / vmax), 0, 1)
+        decision_vigil = np.clip(np.nan_to_num(vg_dec[:n_tokens] / vmax), 0, 1)
+        feature_baseline = np.clip(np.nan_to_num(bl_feat[:n_tokens] / vmax), 0, 1)
+        feature_vigil = np.clip(np.nan_to_num(vg_feat[:n_tokens] / vmax), 0, 1)
+
+        # Estimate thinking boundary (approximate: 60% of tokens)
+        think_end = int(n_tokens * 0.6)
+        data_label = "Real GPU-measured activations"
+    else:
+        print("  Using simulated data (run collect_real_data.py --task drift for real)")
+        n_tokens = 160
+        t = np.arange(n_tokens)
+        think_end = 100
+
+        baseline_think = 0.70 / (1 + 0.012 * t[:think_end])
+        baseline_answer = baseline_think[-1] * np.exp(-0.02 * np.arange(n_tokens - think_end))
+        baseline = np.concatenate([baseline_think, baseline_answer])
+        baseline += np.random.normal(0, 0.03, n_tokens)
+        baseline = np.clip(baseline, 0.05, 0.85)
+
+        vigil_base = 0.58
+        vigil_think = vigil_base + 0.04 * np.sin(0.05 * t[:think_end])
+        vigil_think += np.random.normal(0, 0.02, think_end)
+        vigil_answer_raw = np.concatenate([
+            np.linspace(vigil_base - 0.05, vigil_base - 0.08, 10),
+            np.linspace(vigil_base - 0.06, vigil_base - 0.02, n_tokens - think_end - 10),
+        ])
+        vigil_answer = vigil_answer_raw + np.random.normal(0, 0.025, n_tokens - think_end)
+        vigil = np.concatenate([vigil_think, vigil_answer])
+        vigil = np.clip(vigil, 0.1, 0.80)
+
+        # Simulated decision/feature head curves
+        decision_baseline = 0.9 * np.exp(-0.015 * t) + np.random.normal(0, 0.03, n_tokens)
+        decision_vigil = 0.75 + 0.05 * np.sin(0.04 * t) + np.random.normal(0, 0.03, n_tokens)
+        feature_baseline = 0.5 * np.exp(-0.008 * t) + np.random.normal(0, 0.02, n_tokens)
+        feature_vigil = 0.55 + np.random.normal(0, 0.025, n_tokens)
+        decision_baseline = np.clip(decision_baseline, 0, 1)
+        decision_vigil = np.clip(decision_vigil, 0, 1)
+        feature_baseline = np.clip(feature_baseline, 0, 1)
+        feature_vigil = np.clip(feature_vigil, 0, 1)
+        data_label = "Simulated (run collect_real_data.py for real)"
 
     # Smoothed versions for trend lines
     baseline_smooth = uniform_filter1d(baseline, size=7)
@@ -166,39 +271,48 @@ def fig1_enhanced_drift():
 
     # O(1/L) reference curve
     ref_curve = 0.70 / (1 + 0.012 * t)
-    ax1.plot(t[:120], ref_curve[:120], 'k--', alpha=0.3, linewidth=1,
+    ref_end = min(120, n_tokens)
+    ax1.plot(t[:ref_end], ref_curve[:ref_end], 'k--', alpha=0.3, linewidth=1,
              label='O(1/L) reference')
 
-    # Annotate the drift
+    # Annotate the drift — use proportional positions
+    ann_pos = min(int(n_tokens * 0.5), n_tokens - 1)
+    ann_text_x = min(int(n_tokens * 0.6), n_tokens - 1)
+    y_range = max(float(np.nanmax(vigil_smooth)), float(np.nanmax(baseline_smooth)), 0.5)
+
     ax1.annotate('O(1/L) decay\n"blind reasoner"',
-                xy=(80, baseline_smooth[80]), xytext=(95, 0.55),
+                xy=(ann_pos, baseline_smooth[ann_pos]),
+                xytext=(ann_text_x, y_range * 0.7),
                 fontsize=10, color='#e03131', fontweight='bold',
                 arrowprops=dict(arrowstyle='->', color='#e03131', lw=1.5),
                 bbox=dict(boxstyle='round,pad=0.3', facecolor='#ffe3e3', alpha=0.8))
 
-    # Annotate VIGIL sustained
     ax1.annotate('Sustained grounding\n"visually anchored"',
-                xy=(80, vigil_smooth[80]), xytext=(50, 0.75),
+                xy=(ann_pos, vigil_smooth[ann_pos]),
+                xytext=(int(n_tokens * 0.3), y_range * 0.95),
                 fontsize=10, color='#2b8a3e', fontweight='bold',
                 arrowprops=dict(arrowstyle='->', color='#2b8a3e', lw=1.5),
                 bbox=dict(boxstyle='round,pad=0.3', facecolor='#d8f5a2', alpha=0.8))
 
-    # Answer phase annotation
-    ax1.annotate('Critical: vision needed\nfor final answer',
-                xy=(think_end + 15, 0.15), xytext=(think_end + 35, 0.30),
-                fontsize=9, color='gray',
-                arrowprops=dict(arrowstyle='->', color='gray', lw=1),
-                bbox=dict(boxstyle='round', facecolor='lightyellow', alpha=0.8))
+    # Answer phase annotation (only if think_end is within range)
+    if think_end + 15 < n_tokens and think_end + 35 < n_tokens:
+        ax1.annotate('Critical: vision needed\nfor final answer',
+                    xy=(think_end + 15, 0.15), xytext=(think_end + 35, 0.30),
+                    fontsize=9, color='gray',
+                    arrowprops=dict(arrowstyle='->', color='gray', lw=1),
+                    bbox=dict(boxstyle='round', facecolor='lightyellow', alpha=0.8))
 
     # Delta annotation
-    mid = think_end - 20
+    mid = max(think_end - 20, int(n_tokens * 0.3))
+    mid = min(mid, n_tokens - 1)
     delta_y = vigil_smooth[mid] - baseline_smooth[mid]
-    ax1.annotate('', xy=(mid, vigil_smooth[mid]), xytext=(mid, baseline_smooth[mid]),
-                arrowprops=dict(arrowstyle='<->', color='purple', lw=2))
-    ax1.text(mid + 2, (vigil_smooth[mid] + baseline_smooth[mid]) / 2,
-            f'Δ = {delta_y:.2f}\n(+{delta_y/baseline_smooth[mid]*100:.0f}%)',
-            fontsize=10, color='purple', fontweight='bold',
-            bbox=dict(facecolor='#f3d9fa', alpha=0.8, boxstyle='round'))
+    if abs(baseline_smooth[mid]) > 1e-6:
+        ax1.annotate('', xy=(mid, vigil_smooth[mid]), xytext=(mid, baseline_smooth[mid]),
+                    arrowprops=dict(arrowstyle='<->', color='purple', lw=2))
+        ax1.text(mid + 2, (vigil_smooth[mid] + baseline_smooth[mid]) / 2,
+                f'Δ = {delta_y:.2f}\n(+{delta_y/baseline_smooth[mid]*100:.0f}%)',
+                fontsize=10, color='purple', fontweight='bold',
+                bbox=dict(facecolor='#f3d9fa', alpha=0.8, boxstyle='round'))
 
     ax1.set_ylabel('Mean Vision Head Activation (Δ)', fontsize=13)
     ax1.set_xlabel('Token Position in Generation Sequence', fontsize=13)
@@ -207,24 +321,18 @@ def fig1_enhanced_drift():
                   fontsize=14, fontweight='bold')
     ax1.legend(loc='upper right', fontsize=11, framealpha=0.9)
     ax1.set_xlim(0, n_tokens)
-    ax1.set_ylim(0, 0.88)
+    ax1.set_ylim(0, max(0.88, float(np.nanmax(vigil_smooth)) * 1.3))
+    ax1.text(0.02, 0.02, f'Data: {data_label}', transform=ax1.transAxes,
+             fontsize=8, color='gray', alpha=0.7)
 
     # --- Bottom panel: Per-head decomposition ---
     ax2 = fig.add_subplot(gs[1])
 
-    # Show which heads contribute at each position
-    # Decision heads (L4-5): high early, decay fast
-    decision_baseline = 0.9 * np.exp(-0.015 * t) + np.random.normal(0, 0.03, n_tokens)
-    decision_vigil = 0.75 + 0.05 * np.sin(0.04 * t) + np.random.normal(0, 0.03, n_tokens)
-
-    # Feature heads (L23-27): moderate, steady
-    feature_baseline = 0.5 * np.exp(-0.008 * t) + np.random.normal(0, 0.02, n_tokens)
-    feature_vigil = 0.55 + np.random.normal(0, 0.025, n_tokens)
-
-    decision_baseline_s = uniform_filter1d(np.clip(decision_baseline, 0, 1), 7)
-    decision_vigil_s = uniform_filter1d(np.clip(decision_vigil, 0, 1), 7)
-    feature_baseline_s = uniform_filter1d(np.clip(feature_baseline, 0, 1), 7)
-    feature_vigil_s = uniform_filter1d(np.clip(feature_vigil, 0, 1), 7)
+    # Decision/feature curves already computed above (real or simulated)
+    decision_baseline_s = uniform_filter1d(decision_baseline, 7)
+    decision_vigil_s = uniform_filter1d(decision_vigil, 7)
+    feature_baseline_s = uniform_filter1d(feature_baseline, 7)
+    feature_vigil_s = uniform_filter1d(feature_vigil, 7)
 
     ax2.fill_between(t, 0, decision_baseline_s, alpha=0.3, color='#ff6b6b', label='Decision heads (baseline)')
     ax2.fill_between(t, 0, decision_vigil_s, alpha=0.3, color='#51cf66', label='Decision heads (VIGIL)')
@@ -248,7 +356,7 @@ def fig1_enhanced_drift():
 #  FIGURE 2: Head Activation Heatmap × Token Position (the "CAM")
 # ══════════════════════════════════════════════════════════════════════
 
-def fig2_head_cam_heatmap():
+def fig2_head_cam_heatmap(real_data=None):
     """
     Per-head activation Δ across token positions — shows which heads
     are active at which point in generation. Like a CAM but for attention heads.
@@ -256,78 +364,100 @@ def fig2_head_cam_heatmap():
     print("[fig2] Head × Token Activation CAM...")
     np.random.seed(42)
 
-    n_tokens = 100
     n_heads = 12  # top 12 vision heads
-
     head_labels = [f"L{l}H{h}\n(d={d:.1f})" for l, h, d in VISION_HEADS]
 
-    # Baseline: activation decays differently per head
-    baseline_cam = np.zeros((n_heads, n_tokens))
-    for i, (l, h, d) in enumerate(VISION_HEADS):
-        # Decision heads (L0-5): strong early, fast decay
-        if l <= 5:
-            decay_rate = 0.02 + 0.005 * d
-            baseline_cam[i] = d * np.exp(-decay_rate * np.arange(n_tokens))
-        # Mid heads (L6-15): moderate, slower decay
-        elif l <= 15:
-            decay_rate = 0.01
-            baseline_cam[i] = d * 0.7 * np.exp(-decay_rate * np.arange(n_tokens))
-        # Feature heads (L23-27): moderate, sustained longer
-        else:
-            decay_rate = 0.005
-            baseline_cam[i] = d * 0.8 * np.exp(-decay_rate * np.arange(n_tokens))
-        baseline_cam[i] += np.random.normal(0, 0.3, n_tokens)
-    baseline_cam = np.clip(baseline_cam, 0, 12)
+    use_real = False
+    if real_data is not None:
+        # Build heatmaps from real data
+        bl_mean, bl_heads, _, _ = aggregate_real_curves(real_data, "baseline")
+        vg_mean, vg_heads, _, _ = aggregate_real_curves(real_data, "exp10")
+        if bl_heads is not None and vg_heads is not None:
+            use_real = True
 
-    # VIGIL: trained to maintain activation
-    vigil_cam = np.zeros((n_heads, n_tokens))
-    for i, (l, h, d) in enumerate(VISION_HEADS):
-        # All heads maintain higher sustained activation
-        base_level = d * 0.6
-        vigil_cam[i] = base_level + 0.3 * np.sin(0.05 * np.arange(n_tokens) + i)
-        # Slight warmup for first 10 tokens
-        vigil_cam[i, :10] *= np.linspace(0.7, 1.0, 10)
-        vigil_cam[i] += np.random.normal(0, 0.25, n_tokens)
-    vigil_cam = np.clip(vigil_cam, 0, 12)
+    if use_real:
+        print("  Using REAL GPU-measured activation data")
+        # Map calibrated vision heads to their real data
+        n_tokens = min(len(bl_mean), len(vg_mean))
+        baseline_cam = np.zeros((n_heads, n_tokens))
+        vigil_cam = np.zeros((n_heads, n_tokens))
+        for i, (l, h, d) in enumerate(VISION_HEADS):
+            key = f"L{l}H{h}"
+            if key in bl_heads:
+                baseline_cam[i] = bl_heads[key][:n_tokens]
+            if key in vg_heads:
+                vigil_cam[i] = vg_heads[key][:n_tokens]
+        baseline_cam = np.nan_to_num(baseline_cam, nan=0.0)
+        vigil_cam = np.nan_to_num(vigil_cam, nan=0.0)
+        data_label = "Real GPU-measured"
+    else:
+        print("  Using simulated data")
+        n_tokens = 100
+        baseline_cam = np.zeros((n_heads, n_tokens))
+        for i, (l, h, d) in enumerate(VISION_HEADS):
+            if l <= 5:
+                decay_rate = 0.02 + 0.005 * d
+                baseline_cam[i] = d * np.exp(-decay_rate * np.arange(n_tokens))
+            elif l <= 15:
+                decay_rate = 0.01
+                baseline_cam[i] = d * 0.7 * np.exp(-decay_rate * np.arange(n_tokens))
+            else:
+                decay_rate = 0.005
+                baseline_cam[i] = d * 0.8 * np.exp(-decay_rate * np.arange(n_tokens))
+            baseline_cam[i] += np.random.normal(0, 0.3, n_tokens)
+        baseline_cam = np.clip(baseline_cam, 0, 12)
+
+        vigil_cam = np.zeros((n_heads, n_tokens))
+        for i, (l, h, d) in enumerate(VISION_HEADS):
+            base_level = d * 0.6
+            vigil_cam[i] = base_level + 0.3 * np.sin(0.05 * np.arange(n_tokens) + i)
+            vigil_cam[i, :10] *= np.linspace(0.7, 1.0, 10)
+            vigil_cam[i] += np.random.normal(0, 0.25, n_tokens)
+        vigil_cam = np.clip(vigil_cam, 0, 12)
+        data_label = "Simulated"
 
     # Create figure
     fig, axes = plt.subplots(2, 1, figsize=(16, 10), sharex=True)
+    vmax = max(np.percentile(baseline_cam, 95), np.percentile(vigil_cam, 95), 1.0)
+    think_boundary = int(n_tokens * 0.7)  # approximate
 
     # Baseline heatmap
     im1 = axes[0].imshow(baseline_cam, aspect='auto', cmap='hot',
-                          interpolation='bilinear', vmin=0, vmax=10)
+                          interpolation='bilinear', vmin=0, vmax=vmax)
     axes[0].set_yticks(range(n_heads))
     axes[0].set_yticklabels(head_labels, fontsize=8)
-    axes[0].set_title('BASELINE: Vision Head Activation Across Generation\n'
+    axes[0].set_title(f'BASELINE: Vision Head Activation Across Generation ({data_label})\n'
                       '(brighter = stronger visual processing, dark = "blind")',
                       fontsize=13, fontweight='bold')
-    axes[0].axvline(70, color='cyan', linestyle='--', linewidth=1.5, alpha=0.7)
-    axes[0].text(72, 0.5, '</think>', color='cyan', fontsize=9)
+    axes[0].axvline(think_boundary, color='cyan', linestyle='--', linewidth=1.5, alpha=0.7)
+    axes[0].text(think_boundary + 2, 0.5, '</think>', color='cyan', fontsize=9)
     plt.colorbar(im1, ax=axes[0], label='Activation Δ (real - black)', shrink=0.8)
 
     # Add "going dark" annotation
+    ann_x = min(int(n_tokens * 0.8), n_tokens - 1)
+    ann_txt_x = min(int(n_tokens * 0.55), n_tokens - 1)
     axes[0].annotate('Heads going dark\n→ model ignoring image',
-                    xy=(80, 2), xytext=(55, 5),
+                    xy=(ann_x, 2), xytext=(ann_txt_x, 5),
                     fontsize=10, color='white', fontweight='bold',
                     arrowprops=dict(arrowstyle='->', color='white', lw=2),
                     bbox=dict(facecolor='black', alpha=0.6, boxstyle='round'))
 
     # VIGIL heatmap
     im2 = axes[1].imshow(vigil_cam, aspect='auto', cmap='hot',
-                          interpolation='bilinear', vmin=0, vmax=10)
+                          interpolation='bilinear', vmin=0, vmax=vmax)
     axes[1].set_yticks(range(n_heads))
     axes[1].set_yticklabels(head_labels, fontsize=8)
     axes[1].set_xlabel('Token Position in Generation', fontsize=12)
     axes[1].set_title('VIGIL Exp10: Sustained Vision Head Activation\n'
                       '(heads stay bright → model keeps using visual information)',
                       fontsize=13, fontweight='bold')
-    axes[1].axvline(70, color='cyan', linestyle='--', linewidth=1.5, alpha=0.7)
-    axes[1].text(72, 0.5, '</think>', color='cyan', fontsize=9)
+    axes[1].axvline(think_boundary, color='cyan', linestyle='--', linewidth=1.5, alpha=0.7)
+    axes[1].text(think_boundary + 2, 0.5, '</think>', color='cyan', fontsize=9)
     plt.colorbar(im2, ax=axes[1], label='Activation Δ (real - black)', shrink=0.8)
 
     # Add "sustained" annotation
     axes[1].annotate('Heads stay active\n→ visually grounded output',
-                    xy=(80, 2), xytext=(55, 5),
+                    xy=(ann_x, 2), xytext=(ann_txt_x, 5),
                     fontsize=10, color='yellow', fontweight='bold',
                     arrowprops=dict(arrowstyle='->', color='yellow', lw=2),
                     bbox=dict(facecolor='darkgreen', alpha=0.6, boxstyle='round'))
@@ -341,70 +471,118 @@ def fig2_head_cam_heatmap():
 #  FIGURE 3: Image + Head Activation Overlay (spatial "CAM")
 # ══════════════════════════════════════════════════════════════════════
 
-def fig3_image_heatmap_overlay():
+def fig3_image_heatmap_overlay(real_data=None):
     """
-    Create synthetic example showing what the model "looks at":
-    - Left: image with baseline attention overlay (fading)
-    - Right: image with VIGIL attention overlay (sustained)
+    Show what the model "looks at" with attention overlays.
+    Uses real POPE image when real_data is available, synthetic otherwise.
+
+    Note: Spatial attention maps are conceptual illustrations — o_proj head
+    activations are per-head scalars, not spatial. The overlay intensity is
+    scaled by actual per-token activation strength when real data available.
     """
     print("[fig3] Image + Head Activation Overlay...")
 
-    # Create a synthetic "POPE-style" scene image
+    # Try to load a real POPE image
+    real_image = None
+    real_question = None
+    attn_scales = None  # [early, mid, late] relative attention strength
+    if real_data and real_data.get("baseline"):
+        sample = real_data["baseline"][0]
+        real_question = sample.get("question", "")
+        # Get attention decay curve from real data for scaling
+        bl_mean, _, _, _ = aggregate_real_curves(real_data, "baseline")
+        vg_mean, _, _, _ = aggregate_real_curves(real_data, "exp10")
+        if bl_mean is not None and vg_mean is not None:
+            n = min(len(bl_mean), len(vg_mean))
+            # Sample at 5%, 50%, 90% of generation
+            pts = [max(0, int(n*f)) for f in [0.05, 0.50, 0.90]]
+            pts = [min(p, n-1) for p in pts]
+            bl_max = max(bl_mean[pts[0]], 1e-6)
+            attn_scales = {
+                "baseline": [float(bl_mean[p] / bl_max) for p in pts],
+                "vigil": [float(vg_mean[p] / bl_max) for p in pts],
+            }
+            print(f"  Attention scales from real data: baseline={attn_scales['baseline']}, "
+                  f"vigil={attn_scales['vigil']}")
+
+        # Try to load the actual image
+        try:
+            from datasets import load_from_disk
+            ds = load_from_disk("data/eval/pope")
+            for split in ["random", "popular", "adversarial"]:
+                if split in ds:
+                    for item in ds[split]:
+                        if item["question"] == real_question:
+                            real_image = item["image"]
+                            break
+                if real_image:
+                    break
+        except Exception as e:
+            print(f"  Could not load real POPE image: {e}")
+
     img_size = 448
-    img = Image.new('RGB', (img_size, img_size), (180, 200, 180))
-    draw = ImageDraw.Draw(img)
-
-    # Draw scene: sky, ground, objects
-    draw.rectangle([0, 0, img_size, img_size//3], fill=(135, 206, 235))  # sky
-    draw.rectangle([0, img_size//3, img_size, img_size], fill=(34, 139, 34))  # grass
-
-    # "Cat" object (main subject — POPE asks about this)
-    cat_x, cat_y = 200, 220
-    draw.ellipse([cat_x-40, cat_y-30, cat_x+40, cat_y+30], fill=(80, 60, 40))  # body
-    draw.ellipse([cat_x-15, cat_y-50, cat_x+15, cat_y-20], fill=(80, 60, 40))  # head
-    draw.ellipse([cat_x-18, cat_y-60, cat_x-8, cat_y-45], fill=(80, 60, 40))   # ear L
-    draw.ellipse([cat_x+8, cat_y-60, cat_x+18, cat_y-45], fill=(80, 60, 40))   # ear R
-    draw.ellipse([cat_x-8, cat_y-42, cat_x-3, cat_y-36], fill=(255, 255, 0))   # eye L
-    draw.ellipse([cat_x+3, cat_y-42, cat_x+8, cat_y-36], fill=(255, 255, 0))   # eye R
-
-    # "Tree" (distractor)
-    draw.rectangle([80, 100, 100, 250], fill=(101, 67, 33))
-    draw.ellipse([50, 60, 130, 130], fill=(0, 100, 0))
-
-    # "House" (distractor)
-    draw.rectangle([320, 150, 420, 250], fill=(200, 150, 100))
-    draw.polygon([(310, 150), (370, 100), (430, 150)], fill=(180, 50, 50))
+    if real_image is not None and isinstance(real_image, Image.Image):
+        img = real_image.resize((img_size, img_size))
+        print(f"  Using REAL POPE image for: {real_question[:60]}")
+    else:
+        img = Image.new('RGB', (img_size, img_size), (180, 200, 180))
+    if real_image is None or not isinstance(real_image, Image.Image):
+        draw = ImageDraw.Draw(img)
+        # Draw synthetic scene: sky, ground, objects
+        draw.rectangle([0, 0, img_size, img_size//3], fill=(135, 206, 235))
+        draw.rectangle([0, img_size//3, img_size, img_size], fill=(34, 139, 34))
+        cat_x, cat_y = 200, 220
+        draw.ellipse([cat_x-40, cat_y-30, cat_x+40, cat_y+30], fill=(80, 60, 40))
+        draw.ellipse([cat_x-15, cat_y-50, cat_x+15, cat_y-20], fill=(80, 60, 40))
+        draw.ellipse([cat_x-18, cat_y-60, cat_x-8, cat_y-45], fill=(80, 60, 40))
+        draw.ellipse([cat_x+8, cat_y-60, cat_x+18, cat_y-45], fill=(80, 60, 40))
+        draw.ellipse([cat_x-8, cat_y-42, cat_x-3, cat_y-36], fill=(255, 255, 0))
+        draw.ellipse([cat_x+3, cat_y-42, cat_x+8, cat_y-36], fill=(255, 255, 0))
+        draw.rectangle([80, 100, 100, 250], fill=(101, 67, 33))
+        draw.ellipse([50, 60, 130, 130], fill=(0, 100, 0))
+        draw.rectangle([320, 150, 420, 250], fill=(200, 150, 100))
+        draw.polygon([(310, 150), (370, 100), (430, 150)], fill=(180, 50, 50))
+    else:
+        # Center of real image as default attention center
+        cat_x, cat_y = img_size // 2, img_size // 2
 
     img_arr = np.array(img).astype(float) / 255.0
 
-    # Create attention heatmaps
-    # Baseline: attention focused on cat initially, then diffuses/fades
+    # Create attention heatmaps (conceptual illustration)
     def make_attention_map(img_size, center, sigma, intensity):
         y, x = np.mgrid[0:img_size, 0:img_size]
         gaussian = np.exp(-((x - center[0])**2 + (y - center[1])**2) / (2 * sigma**2))
         return gaussian * intensity
 
-    # Baseline attention: token 5 (strong), token 50 (weak), token 90 (almost gone)
-    baseline_early = make_attention_map(img_size, (cat_x, cat_y), 80, 0.9)
-    baseline_early += make_attention_map(img_size, (90, 120), 60, 0.3)  # tree
-    baseline_early += make_attention_map(img_size, (370, 200), 50, 0.2)  # house
+    # Scale intensities by real activation data if available
+    if attn_scales:
+        bl_s = attn_scales["baseline"]  # [early, mid, late]
+        vg_s = attn_scales["vigil"]
+    else:
+        bl_s = [1.0, 0.4, 0.15]  # simulated decay
+        vg_s = [1.0, 0.85, 0.72]  # simulated sustained
 
-    baseline_mid = make_attention_map(img_size, (cat_x, cat_y), 120, 0.3)
-    baseline_mid += make_attention_map(img_size, (img_size//2, img_size//2), 200, 0.2)  # diffuse
+    # Baseline: attention on center, decaying with generation
+    baseline_early = make_attention_map(img_size, (cat_x, cat_y), 80, 0.9 * bl_s[0])
+    baseline_early += make_attention_map(img_size, (90, 120), 60, 0.3 * bl_s[0])
+    baseline_early += make_attention_map(img_size, (370, 200), 50, 0.2 * bl_s[0])
 
-    baseline_late = np.ones((img_size, img_size)) * 0.1  # uniform (no focus)
-    baseline_late += make_attention_map(img_size, (img_size//2, img_size//2), 300, 0.15)
+    baseline_mid = make_attention_map(img_size, (cat_x, cat_y), 120, 0.9 * bl_s[1])
+    baseline_mid += make_attention_map(img_size, (img_size//2, img_size//2), 200, 0.2 * bl_s[1])
 
-    # VIGIL attention: sustained focus on cat throughout
-    vigil_early = make_attention_map(img_size, (cat_x, cat_y), 70, 0.9)
-    vigil_early += make_attention_map(img_size, (90, 120), 50, 0.35)
-    vigil_early += make_attention_map(img_size, (370, 200), 45, 0.25)
+    baseline_late = np.ones((img_size, img_size)) * 0.1 * bl_s[2]
+    baseline_late += make_attention_map(img_size, (img_size//2, img_size//2), 300, 0.15 * bl_s[2])
 
-    vigil_mid = make_attention_map(img_size, (cat_x, cat_y), 80, 0.75)
+    # VIGIL: sustained focus throughout
+    vigil_early = make_attention_map(img_size, (cat_x, cat_y), 70, 0.9 * vg_s[0])
+    vigil_early += make_attention_map(img_size, (90, 120), 50, 0.35 * vg_s[0])
+    vigil_early += make_attention_map(img_size, (370, 200), 45, 0.25 * vg_s[0])
+
+    vigil_mid = make_attention_map(img_size, (cat_x, cat_y), 80, 0.9 * vg_s[1])
     vigil_mid += make_attention_map(img_size, (90, 120), 55, 0.2)
 
-    vigil_late = make_attention_map(img_size, (cat_x, cat_y), 85, 0.65)
-    vigil_late += make_attention_map(img_size, (370, 200), 60, 0.15)
+    vigil_late = make_attention_map(img_size, (cat_x, cat_y), 85, 0.9 * vg_s[2])
+    vigil_late += make_attention_map(img_size, (370, 200), 60, 0.15 * vg_s[2])
 
     def overlay_heatmap(img_arr, heatmap, cmap_name='jet', alpha=0.5):
         cmap = plt.colormaps.get_cmap(cmap_name)
@@ -451,8 +629,10 @@ def fig3_image_heatmap_overlay():
                    color='#2b8a3e', ha='center', fontweight='bold',
                    bbox=dict(facecolor='#d8f5a2', alpha=0.9, boxstyle='round,pad=0.3'))
 
-    fig.suptitle('Vision Head Activation Overlay: Where the Model "Looks"\n'
-                'Question: "Is there a cat in the image?" — Attention on relevant object over time',
+    q_display = real_question[:60] if real_question else "Is there a cat in the image?"
+    src = "Real POPE image + measured attention decay" if attn_scales else "Synthetic illustration"
+    fig.suptitle(f'Vision Head Activation Overlay: Where the Model "Looks"\n'
+                f'Q: "{q_display}" — {src}',
                 fontsize=15, fontweight='bold', y=0.98)
 
     plt.tight_layout(rect=[0.05, 0, 1, 0.95])
@@ -974,13 +1154,20 @@ python scripts/phase6_head_mask_grpo.py \\
 # ══════════════════════════════════════════════════════════════════════
 
 def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--no-real", action="store_true",
+                       help="Force simulated data even if real data exists")
+    args = parser.parse_args()
+
     print("="*60)
     print("  VIGIL Deep Vision Drift Analysis")
     print("="*60)
 
-    fig1_enhanced_drift()
-    fig2_head_cam_heatmap()
-    fig3_image_heatmap_overlay()
+    real_data = None if args.no_real else load_real_drift_data()
+
+    fig1_enhanced_drift(real_data)
+    fig2_head_cam_heatmap(real_data)
+    fig3_image_heatmap_overlay(real_data)
     fig4_mechanism_diagram()
     fig5_head_weight_evolution()
     fig6_blind_test_evidence()

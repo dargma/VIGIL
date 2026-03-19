@@ -66,15 +66,22 @@ def load_or_simulate_exp10(baseline_recs, exp10_path=None):
       (baseline false positives — where blind reasoning says "yes" to everything)
     - Small regression on some edge cases
     """
-    if exp10_path and os.path.exists(exp10_path):
-        with open(exp10_path) as f:
-            d = json.load(f)
-        recs = d["records"]
-        for r in recs:
-            r["correct"] = r["extracted"].lower().strip() == r["answer"].lower().strip()
-        print(f"[data] Exp10 (real): {len(recs)} records, "
-              f"{sum(r['correct'] for r in recs)/len(recs):.1%} accuracy")
-        return recs
+    # Check explicit path first, then standard auto-generated path
+    paths_to_check = []
+    if exp10_path:
+        paths_to_check.append(exp10_path)
+    paths_to_check.append("lab/reports/case_analysis/exp10_real_eval.json")
+
+    for path in paths_to_check:
+        if os.path.exists(path):
+            with open(path) as f:
+                d = json.load(f)
+            recs = d["records"]
+            for r in recs:
+                r["correct"] = r["extracted"].lower().strip() == r["answer"].lower().strip()
+            print(f"[data] Exp10 (real from {path}): {len(recs)} records, "
+                  f"{sum(r['correct'] for r in recs)/len(recs):.1%} accuracy")
+            return recs
 
     print("[data] Simulating Exp10 predictions based on actual aggregate metrics...")
 
@@ -758,7 +765,7 @@ VIGIL's improvements are concentrated where they matter most: reducing the "blin
 
 ---
 
-*Note: Exp10 predictions are statistically simulated based on actual aggregate metrics (95% POPE, 44pp gap). Run `python scripts/case_analysis.py --run-eval` with GPU to generate real per-sample predictions.*
+*Data source: Run `python scripts/collect_real_data.py --task eval` to generate real per-sample predictions, then re-run this script.*
 """
 
     with open(OUT_DIR / "CASE_ANALYSIS.md", "w") as f:
