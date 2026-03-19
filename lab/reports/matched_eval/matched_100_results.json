@@ -1,0 +1,2027 @@
+{
+  "config": {
+    "n_samples": 100,
+    "max_new_tokens": 512,
+    "do_sample": false,
+    "enable_thinking": true,
+    "exp10_path": "checkpoints/exp10_sharp_soft/scaled_final/best"
+  },
+  "baseline": {
+    "label": "baseline",
+    "n": 100,
+    "correct": 80,
+    "acc": 80.0,
+    "unknown": 10
+  },
+  "exp10": {
+    "label": "exp10",
+    "n": 100,
+    "correct": 83,
+    "acc": 83.0,
+    "unknown": 8
+  },
+  "baseline_records": [
+    {
+      "index": 0,
+      "question": "Is there a snowboard in the image?",
+      "answer": "Yes",
+      "category": "random",
+      "raw": "So, let's look at the image. There's a person skiing or snowboarding down a snowy slope. Wait, the person is wearing a red jacket and dark pants, and they're on a snow-covered hill. The question is if there's a snowboard. Let me check. Snowboarding is a different activity than skiing, but in the image, the person is moving down the slope, and the equipment they're using\u2014since it's a snowboard, but wait, maybe it's a snowboard. Wait, no, the person is on a snowboard? Wait, the image shows a perso",
+      "thinking_words": 0,
+      "extracted": "Unknown",
+      "correct": false
+    },
+    {
+      "index": 1,
+      "question": "Is there a car in the image?",
+      "answer": "No",
+      "category": "random",
+      "raw": "So, let's look at the image. The picture shows a snowy slope with a person skiing. There's no car visible in the scene. The focus is on the skier and the snow. So the answer should be no.\n</think>\n\nno<|im_end|>",
+      "thinking_words": 0,
+      "extracted": "No",
+      "correct": true
+    },
+    {
+      "index": 2,
+      "question": "Is there a person in the image?",
+      "answer": "Yes",
+      "category": "random",
+      "raw": "So, let's look at the image. There's a person skiing down the snowy slope. The person is wearing a red jacket and dark pants, and they're in the middle of the snow. So yes, there is a person.\n</think>\n\nyes<|im_end|>",
+      "thinking_words": 0,
+      "extracted": "Yes",
+      "correct": true
+    },
+    {
+      "index": 3,
+      "question": "Is there a sandwich in the image?",
+      "answer": "No",
+      "category": "random",
+      "raw": "So, let's look at the image. The picture shows a snowy mountain with a person skiing. There's no sandwich visible in the image. The question is asking if there's a sandwich, so the answer should be no.\n</think>\n\nno<|im_end|>",
+      "thinking_words": 0,
+      "extracted": "No",
+      "correct": true
+    },
+    {
+      "index": 4,
+      "question": "Is there a skis in the image?",
+      "answer": "Yes",
+      "category": "random",
+      "raw": "So, let's look at the image. There's a person skiing down a snowy slope. The person is wearing a red jacket and dark pants, and they're on skis. So, yes, there are skis in the image.\n</think>\n\nyes<|im_end|>",
+      "thinking_words": 0,
+      "extracted": "Yes",
+      "correct": true
+    },
+    {
+      "index": 5,
+      "question": "Is there a couch in the image?",
+      "answer": "No",
+      "category": "random",
+      "raw": "So, let's look at the image. The picture shows a snowy mountain slope with a person skiing. There's no couch visible in the scene. The background is all snow, and there's no furniture or couch. So the answer is no.\n</think>\n\nno<|im_end|>",
+      "thinking_words": 0,
+      "extracted": "No",
+      "correct": true
+    },
+    {
+      "index": 6,
+      "question": "Is there a truck in the image?",
+      "answer": "Yes",
+      "category": "random",
+      "raw": "So, let's look at the image. In the background, there's a black truck parked on the grassy area. So yes, there is a truck.\n</think>\n\nyes<|im_end|>",
+      "thinking_words": 0,
+      "extracted": "Yes",
+      "correct": true
+    },
+    {
+      "index": 7,
+      "question": "Is there a pizza in the image?",
+      "answer": "No",
+      "category": "random",
+      "raw": "So, let's look at the image. The picture shows two people under an umbrella on a wet street. There's no pizza visible anywhere in the scene. The background has a house, a truck, grass, and trees. No food items like pizza are present. So the answer is no.\n</think>\n\nno<|im_end|>",
+      "thinking_words": 0,
+      "extracted": "No",
+      "correct": true
+    },
+    {
+      "index": 8,
+      "question": "Is there a person in the image?",
+      "answer": "Yes",
+      "category": "random",
+      "raw": "So, let's look at the image. There are two people: an adult and a child. The adult is holding a red and black umbrella, and the child is standing next to them. So yes, there are people in the image.\n</think>\n\nyes<|im_end|>",
+      "thinking_words": 0,
+      "extracted": "Yes",
+      "correct": true
+    },
+    {
+      "index": 9,
+      "question": "Is there a sink in the image?",
+      "answer": "No",
+      "category": "random",
+      "raw": "So, let's look at the image. The picture shows two people under an umbrella on a wet street. There's a grassy area, a car, and some buildings in the background. I don't see any sink in the image. Sinks are usually in kitchens or bathrooms, which aren't present here. So the answer is no.\n</think>\n\nno<|im_end|>",
+      "thinking_words": 0,
+      "extracted": "No",
+      "correct": true
+    },
+    {
+      "index": 10,
+      "question": "Is there an umbrella in the image?",
+      "answer": "Yes",
+      "category": "random",
+      "raw": "So, let's look at the image. There's a person holding a red and black umbrella. So yes, there is an umbrella.\n</think>\n\nyes<|im_end|>",
+      "thinking_words": 0,
+      "extracted": "Yes",
+      "correct": true
+    },
+    {
+      "index": 11,
+      "question": "Is there a cell phone in the image?",
+      "answer": "No",
+      "category": "random",
+      "raw": "So, let's look at the image. The picture shows a person holding a red and black umbrella, standing with a child. There's no cell phone visible in the scene. The background has a car, grass, and a building, but no cell phone. So the answer is no.\n</think>\n\nno<|im_end|>",
+      "thinking_words": 0,
+      "extracted": "No",
+      "correct": true
+    },
+    {
+      "index": 12,
+      "question": "Is there a person in the image?",
+      "answer": "Yes",
+      "category": "random",
+      "raw": "So, let's check the image. There are people visible. For example, near the bus stop, there are people. Also, the van has a person inside. So yes, there are people.\n</think>\n\nyes<|im_end|>",
+      "thinking_words": 0,
+      "extracted": "Yes",
+      "correct": true
+    },
+    {
+      "index": 13,
+      "question": "Is there a sheep in the image?",
+      "answer": "No",
+      "category": "random",
+      "raw": "So, let's look at the image. The scene is a bus station with various vehicles: buses, a van, palm trees, buildings. There's no sheep visible. So the answer is no.\n</think>\n\nno<|im_end|>",
+      "thinking_words": 0,
+      "extracted": "No",
+      "correct": true
+    },
+    {
+      "index": 14,
+      "question": "Is there a bicycle in the image?",
+      "answer": "Yes",
+      "category": "random",
+      "raw": "So, let's look at the image. In the lower right area, there's a person riding a bicycle. So yes, there is a bicycle.\n</think>\n\nyes<|im_end|>",
+      "thinking_words": 0,
+      "extracted": "Yes",
+      "correct": true
+    },
+    {
+      "index": 15,
+      "question": "Is there a broccoli in the image?",
+      "answer": "No",
+      "category": "random",
+      "raw": "So, let's look at the image. The question is asking if there's broccoli. Broccoli is a vegetable, and in the image, there are buses, palm trees, buildings, etc. I don't see any broccoli. So the answer is no.\n</think>\n\nno<|im_end|>",
+      "thinking_words": 0,
+      "extracted": "No",
+      "correct": true
+    },
+    {
+      "index": 16,
+      "question": "Is there a car in the image?",
+      "answer": "Yes",
+      "category": "random",
+      "raw": "So, let's check the image. The question is whether there's a car. Looking at the image, there are buses, a van, but no cars. Wait, the image shows a bus stop with buses, a van, and some people. Are there any cars? Let me scan again. The vehicles present are the green and red buses, the white van, and maybe some other vehicles? Wait, no, the image doesn't show any cars. So the answer is no.\n</think>\n\nno<|im_end|>",
+      "thinking_words": 0,
+      "extracted": "No",
+      "correct": false
+    },
+    {
+      "index": 17,
+      "question": "Is there a tennis racket in the image?",
+      "answer": "No",
+      "category": "random",
+      "raw": "So, let's look at the image. The scene is a bus station with buses, a van, palm trees, buildings. There's no tennis racket visible. So the answer is no.\n</think>\n\nno<|im_end|>",
+      "thinking_words": 0,
+      "extracted": "No",
+      "correct": true
+    },
+    {
+      "index": 18,
+      "question": "Is there a person in the image?",
+      "answer": "Yes",
+      "category": "random",
+      "raw": "So, let's check the image. There's a red double-decker bus with people on the top deck. Some people are waving, others are standing. So there are people in the image. The answer should be yes.\n</think>\n\nyes<|im_end|>",
+      "thinking_words": 0,
+      "extracted": "Yes",
+      "correct": true
+    },
+    {
+      "index": 19,
+      "question": "Is there a teddy bear in the image?",
+      "answer": "No",
+      "category": "random",
+      "raw": "So, let's look at the image. The picture shows a red double-decker bus with people on the top. There's no teddy bear visible anywhere in the scene. The bus has a sign \"Ruta del Arroz,\" and the surroundings are a street with buildings and trees. No teddy bear is present. So the answer is no.\n</think>\n\nno<|im_end|>",
+      "thinking_words": 0,
+      "extracted": "No",
+      "correct": true
+    },
+    {
+      "index": 20,
+      "question": "Is there a potted plant in the image?",
+      "answer": "Yes",
+      "category": "random",
+      "raw": "So, let's check the image. Looking around, there's a tree on the left side near the building, but are there potted plants? Wait, the question is about potted plants. Let me scan the scene. The image shows a double-decker bus, some buildings, a street. Do I see any plants in pots? Hmm, maybe not. Let's check again. The left side has a palm tree, but is that a potted plant? No, it's a tree outside. So there are no potted plants in the image. So the answer is no.\n</think>\n\nno<|im_end|>",
+      "thinking_words": 0,
+      "extracted": "No",
+      "correct": false
+    },
+    {
+      "index": 21,
+      "question": "Is there a broccoli in the image?",
+      "answer": "No",
+      "category": "random",
+      "raw": "So, let's check the image. The bus has a sign that says \"RUTA DEL ARROZ\" which is Spanish for \"Rice Route\". There's no broccoli visible in the image. Broccoli is a vegetable, and the image shows a red double-decker bus with people on it, a street scene. So the answer is no.\n</think>\n\nno<|im_end|>",
+      "thinking_words": 0,
+      "extracted": "No",
+      "correct": true
+    },
+    {
+      "index": 22,
+      "question": "Is there a car in the image?",
+      "answer": "Yes",
+      "category": "random",
+      "raw": "So, let's check the image. The main subject is a red double-decker bus. Are there any cars? Looking around, in the background, there might be some vehicles, but the question is if there's a car. Wait, the image shows a bus, and maybe other cars in the distance. But the question is asking if there's a car. Let me see. The bus is the main thing, but are there cars? Let's check. The image has a bus, and maybe some other vehicles. Wait, the problem is to answer yes or no. So, is there a car? Let's l",
+      "thinking_words": 0,
+      "extracted": "Unknown",
+      "correct": false
+    },
+    {
+      "index": 23,
+      "question": "Is there an orange in the image?",
+      "answer": "No",
+      "category": "random",
+      "raw": "So, let's check the image. The bus is red, and there's a sign that says \"RUTA DEL ARROZ\" with a wheat symbol. Are there any oranges? Looking at the scene: the bus, people, buildings, trees\u2014no oranges visible. So the answer is no.\n</think>\n\nno<|im_end|>",
+      "thinking_words": 0,
+      "extracted": "No",
+      "correct": true
+    },
+    {
+      "index": 24,
+      "question": "Is there a traffic light in the image?",
+      "answer": "Yes",
+      "category": "random",
+      "raw": "So, let's check the image. In the background, there's a traffic light visible. The traffic light is hanging or maybe mounted on the side, but yes, there's a traffic light in the image. So the answer is yes.\n</think>\n\nyes<|im_end|>",
+      "thinking_words": 0,
+      "extracted": "Yes",
+      "correct": true
+    },
+    {
+      "index": 25,
+      "question": "Is there a train in the image?",
+      "answer": "No",
+      "category": "random",
+      "raw": "So, let's look at the image. The scene is inside a car, and there are other vehicles around. But is there a train? Let's check. The background shows some buildings and maybe other cars, but no train is visible. So the answer is no.\n</think>\n\nno<|im_end|>",
+      "thinking_words": 0,
+      "extracted": "No",
+      "correct": true
+    },
+    {
+      "index": 26,
+      "question": "Is there a person in the image?",
+      "answer": "Yes",
+      "category": "random",
+      "raw": "So, let's look at the image. There are people visible through the car window. For example, there's a person in a white shirt, another in an orange headscarf, and maybe others. So yes, there are people.\n</think>\n\nyes<|im_end|>",
+      "thinking_words": 0,
+      "extracted": "Yes",
+      "correct": true
+    },
+    {
+      "index": 27,
+      "question": "Is there a surfboard in the image?",
+      "answer": "No",
+      "category": "random",
+      "raw": "So, let's look at the image. The scene is inside a car, with decorations like flowers, a clock, and some items. There's no surfboard visible. The background shows a street with other vehicles and people, but no surfboard. So the answer is no.\n</think>\n\nno<|im_end|>",
+      "thinking_words": 0,
+      "extracted": "No",
+      "correct": true
+    },
+    {
+      "index": 28,
+      "question": "Is there a car in the image?",
+      "answer": "Yes",
+      "category": "random",
+      "raw": "So, let's look at the image. The picture shows the interior of a car, right? There's a dashboard with items like flowers, a clock, and the windshield. Also, outside the car, there are other vehicles. So yes, there is a car in the image.\n</think>\n\nyes<|im_end|>",
+      "thinking_words": 0,
+      "extracted": "Yes",
+      "correct": true
+    },
+    {
+      "index": 29,
+      "question": "Is there a kite in the image?",
+      "answer": "No",
+      "category": "random",
+      "raw": "So, let's look at the image. The question is if there's a kite. First, check all elements. The car's dashboard has flowers, a clock, maybe some decorations. There's a hanging thing that looks like grapes or something, but no kite. Kites are usually flown, like in the sky, but here it's inside a car. So no kite in the image.\n</think>\n\nno<|im_end|>",
+      "thinking_words": 0,
+      "extracted": "No",
+      "correct": true
+    },
+    {
+      "index": 30,
+      "question": "Is there a dog in the image?",
+      "answer": "Yes",
+      "category": "random",
+      "raw": "So, let's look at the image. There's a white fluffy dog lying on a table next to a newspaper and a cup. So the answer should be yes.\n</think>\n\nyes<|im_end|>",
+      "thinking_words": 0,
+      "extracted": "Yes",
+      "correct": true
+    },
+    {
+      "index": 31,
+      "question": "Is there a toaster in the image?",
+      "answer": "No",
+      "category": "random",
+      "raw": "So, let's look at the image. The picture shows a white fluffy dog, a newspaper, a cup, and some other items. There's no toaster visible. So the answer is no.\n</think>\n\nno<|im_end|>",
+      "thinking_words": 0,
+      "extracted": "No",
+      "correct": true
+    },
+    {
+      "index": 32,
+      "question": "Is there a dining table in the image?",
+      "answer": "Yes",
+      "category": "random",
+      "raw": "So, let's look at the image. The dog is lying on a surface that looks like a countertop or table. The surface has a pattern, and there's a newspaper and a cup. Dining tables are usually for eating, but this might be a kitchen counter. Wait, the question is if there's a dining table. But maybe the surface is a dining table. Let me check. The image shows a countertop with a newspaper, cup, and dog. Dining tables are typically in dining areas, but maybe this is a kitchen counter. However, the quest",
+      "thinking_words": 0,
+      "extracted": "Unknown",
+      "correct": false
+    },
+    {
+      "index": 33,
+      "question": "Is there a sports ball in the image?",
+      "answer": "No",
+      "category": "random",
+      "raw": "So, let's look at the image. The picture shows a white dog, a newspaper, a cup, and some other items. There's no sports ball visible. So the answer is no.\n</think>\n\nno<|im_end|>",
+      "thinking_words": 0,
+      "extracted": "No",
+      "correct": true
+    },
+    {
+      "index": 34,
+      "question": "Is there a snowboard in the image?",
+      "answer": "Yes",
+      "category": "popular",
+      "raw": "So, let's look at the image. There's a person skiing or snowboarding down a snowy slope. Wait, the person is wearing a red jacket and dark pants, and they're on a snow-covered hill. The question is if there's a snowboard. Let me check. Snowboarding is a different activity than skiing, but in the image, the person is moving down the slope, and the equipment they're using\u2014since it's a snowboard, but wait, maybe it's a snowboard. Wait, no, the person is on a snowboard? Wait, the image shows a perso",
+      "thinking_words": 0,
+      "extracted": "Unknown",
+      "correct": false
+    },
+    {
+      "index": 35,
+      "question": "Is there a dining table in the image?",
+      "answer": "No",
+      "category": "popular",
+      "raw": "So, let's look at the image. The picture shows a snowy mountain slope with a person skiing. There's no dining table here. Dining tables are for eating, and this image is all about skiing and snow. So the answer is no.\n</think>\n\nno<|im_end|>",
+      "thinking_words": 0,
+      "extracted": "No",
+      "correct": true
+    },
+    {
+      "index": 36,
+      "question": "Is there a person in the image?",
+      "answer": "Yes",
+      "category": "popular",
+      "raw": "So, let's look at the image. There's a person skiing down the snowy slope. The person is wearing a red jacket and dark pants, and they're in the middle of the snow. So yes, there is a person.\n</think>\n\nyes<|im_end|>",
+      "thinking_words": 0,
+      "extracted": "Yes",
+      "correct": true
+    },
+    {
+      "index": 37,
+      "question": "Is there a car in the image?",
+      "answer": "No",
+      "category": "popular",
+      "raw": "So, let's look at the image. The picture shows a snowy slope with a person skiing. There's no car visible in the scene. The focus is on the skier and the snow. So the answer should be no.\n</think>\n\nno<|im_end|>",
+      "thinking_words": 0,
+      "extracted": "No",
+      "correct": true
+    },
+    {
+      "index": 38,
+      "question": "Is there a skis in the image?",
+      "answer": "Yes",
+      "category": "popular",
+      "raw": "So, let's look at the image. There's a person skiing down a snowy slope. The person is wearing a red jacket and dark pants, and they're on skis. So, yes, there are skis in the image.\n</think>\n\nyes<|im_end|>",
+      "thinking_words": 0,
+      "extracted": "Yes",
+      "correct": true
+    },
+    {
+      "index": 39,
+      "question": "Is there a chair in the image?",
+      "answer": "No",
+      "category": "popular",
+      "raw": "So, let's look at the image. The picture shows a snowy slope with a person skiing. There's no chair visible in the scene. The question is asking if there's a chair, so I need to check. No chairs are present. So the answer is no.\n</think>\n\nno<|im_end|>",
+      "thinking_words": 0,
+      "extracted": "No",
+      "correct": true
+    },
+    {
+      "index": 40,
+      "question": "Is there a truck in the image?",
+      "answer": "Yes",
+      "category": "popular",
+      "raw": "So, let's look at the image. In the background, there's a black truck parked on the grassy area. So yes, there is a truck.\n</think>\n\nyes<|im_end|>",
+      "thinking_words": 0,
+      "extracted": "Yes",
+      "correct": true
+    },
+    {
+      "index": 41,
+      "question": "Is there a dining table in the image?",
+      "answer": "No",
+      "category": "popular",
+      "raw": "So, let's look at the image. The scene is outdoors, a rainy day, with two people under a red and black umbrella. There's a wet driveway, grass, a car, and some buildings in the background. No dining table is visible here. So the answer is no.\n</think>\n\nno<|im_end|>",
+      "thinking_words": 0,
+      "extracted": "No",
+      "correct": true
+    },
+    {
+      "index": 42,
+      "question": "Is there a person in the image?",
+      "answer": "Yes",
+      "category": "popular",
+      "raw": "So, let's look at the image. There are two people: an adult and a child. The adult is holding a red and black umbrella, and the child is standing next to them. So yes, there are people in the image.\n</think>\n\nyes<|im_end|>",
+      "thinking_words": 0,
+      "extracted": "Yes",
+      "correct": true
+    },
+    {
+      "index": 43,
+      "question": "Is there a car in the image?",
+      "answer": "No",
+      "category": "popular",
+      "raw": "So, let's look at the image. In the background, there's a black truck parked on the grassy area. So yes, there is a car.\n</think>\n\nyes<|im_end|>",
+      "thinking_words": 0,
+      "extracted": "Yes",
+      "correct": false
+    },
+    {
+      "index": 44,
+      "question": "Is there an umbrella in the image?",
+      "answer": "Yes",
+      "category": "popular",
+      "raw": "So, let's look at the image. There's a person holding a red and black umbrella. So yes, there is an umbrella.\n</think>\n\nyes<|im_end|>",
+      "thinking_words": 0,
+      "extracted": "Yes",
+      "correct": true
+    },
+    {
+      "index": 45,
+      "question": "Is there a chair in the image?",
+      "answer": "No",
+      "category": "popular",
+      "raw": "So, let's look at the image. The scene is outdoors, rainy, with two people under a red and black umbrella. There's a wet driveway, grass, a house, and a truck. I don't see any chairs in the image. So the answer is no.\n</think>\n\nno<|im_end|>",
+      "thinking_words": 0,
+      "extracted": "No",
+      "correct": true
+    },
+    {
+      "index": 46,
+      "question": "Is there a person in the image?",
+      "answer": "Yes",
+      "category": "popular",
+      "raw": "So, let's check the image. There are people visible. For example, near the bus stop, there are people. Also, the van has a person inside. So yes, there are people.\n</think>\n\nyes<|im_end|>",
+      "thinking_words": 0,
+      "extracted": "Yes",
+      "correct": true
+    },
+    {
+      "index": 47,
+      "question": "Is there a dining table in the image?",
+      "answer": "No",
+      "category": "popular",
+      "raw": "So, let's look at the image. The scene is a bus station with buses, a van, palm trees, buildings, etc. There's no dining table visible. So the answer is no.\n</think>\n\nno<|im_end|>",
+      "thinking_words": 0,
+      "extracted": "No",
+      "correct": true
+    },
+    {
+      "index": 48,
+      "question": "Is there a bicycle in the image?",
+      "answer": "Yes",
+      "category": "popular",
+      "raw": "So, let's look at the image. In the lower right area, there's a person riding a bicycle. So yes, there is a bicycle.\n</think>\n\nyes<|im_end|>",
+      "thinking_words": 0,
+      "extracted": "Yes",
+      "correct": true
+    },
+    {
+      "index": 49,
+      "question": "Is there a chair in the image?",
+      "answer": "No",
+      "category": "popular",
+      "raw": "So, let's look at the image. The scene is a bus station with buses, a van, palm trees, buildings. Are there any chairs? I don't see any chairs in the picture. So the answer is no.\n</think>\n\nno<|im_end|>",
+      "thinking_words": 0,
+      "extracted": "No",
+      "correct": true
+    },
+    {
+      "index": 50,
+      "question": "Is there a car in the image?",
+      "answer": "Yes",
+      "category": "popular",
+      "raw": "So, let's check the image. The question is whether there's a car. Looking at the image, there are buses, a van, but no cars. Wait, the image shows a bus stop with buses, a van, and some people. Are there any cars? Let me scan again. The vehicles present are the green and red buses, the white van, and maybe some other vehicles? Wait, no, the image doesn't show any cars. So the answer is no.\n</think>\n\nno<|im_end|>",
+      "thinking_words": 0,
+      "extracted": "No",
+      "correct": false
+    },
+    {
+      "index": 51,
+      "question": "Is there a cup in the image?",
+      "answer": "No",
+      "category": "popular",
+      "raw": "So, let's check the image. The question is whether there's a cup. Looking at all the elements: buses, vans, buildings, palm trees, signs. There's no cup visible in the scene. So the answer is no.\n</think>\n\nno<|im_end|>",
+      "thinking_words": 0,
+      "extracted": "No",
+      "correct": true
+    },
+    {
+      "index": 52,
+      "question": "Is there a person in the image?",
+      "answer": "Yes",
+      "category": "popular",
+      "raw": "So, let's check the image. There's a red double-decker bus with people on the top deck. Some people are waving, others are standing. So there are people in the image. The answer should be yes.\n</think>\n\nyes<|im_end|>",
+      "thinking_words": 0,
+      "extracted": "Yes",
+      "correct": true
+    },
+    {
+      "index": 53,
+      "question": "Is there a dining table in the image?",
+      "answer": "No",
+      "category": "popular",
+      "raw": "So, let's look at the image. The picture shows a red double-decker bus with people on the top. There's a street, some buildings, trees, but no dining table visible. So the answer is no.\n</think>\n\nno<|im_end|>",
+      "thinking_words": 0,
+      "extracted": "No",
+      "correct": true
+    },
+    {
+      "index": 54,
+      "question": "Is there a potted plant in the image?",
+      "answer": "Yes",
+      "category": "popular",
+      "raw": "So, let's check the image. Looking around, there's a tree on the left side near the building, but are there potted plants? Wait, the question is about potted plants. Let me scan the scene. The image shows a double-decker bus, some buildings, a street. Do I see any plants in pots? Hmm, maybe not. Let's check again. The left side has a palm tree, but is that a potted plant? No, it's a tree outside. So there are no potted plants in the image. So the answer is no.\n</think>\n\nno<|im_end|>",
+      "thinking_words": 0,
+      "extracted": "No",
+      "correct": false
+    },
+    {
+      "index": 55,
+      "question": "Is there a chair in the image?",
+      "answer": "No",
+      "category": "popular",
+      "raw": "So, let's look at the image. The main subject is a red double-decker bus with people on the top. There's no chair visible in the scene. The bus is on a street, and the surroundings are buildings, trees, etc. No chairs are present. So the answer is no.\n</think>\n\nno<|im_end|>",
+      "thinking_words": 0,
+      "extracted": "No",
+      "correct": true
+    },
+    {
+      "index": 56,
+      "question": "Is there a car in the image?",
+      "answer": "Yes",
+      "category": "popular",
+      "raw": "So, let's check the image. The main subject is a red double-decker bus. Are there any cars? Looking around, in the background, there might be some vehicles, but the question is if there's a car. Wait, the image shows a bus, and maybe other cars in the distance. But the question is asking if there's a car. Let me see. The bus is the main thing, but are there cars? Let's check. The image has a bus, and maybe some other vehicles. Wait, the problem is to answer yes or no. So, is there a car? Let's l",
+      "thinking_words": 0,
+      "extracted": "Unknown",
+      "correct": false
+    },
+    {
+      "index": 57,
+      "question": "Is there a cup in the image?",
+      "answer": "No",
+      "category": "popular",
+      "raw": "So, let's check the image. The question is whether there's a cup. Looking at the double-decker bus, the people on the top are waving, but there's no cup visible. The bus has a sign \"Ruta del Arroz,\" and the surroundings are a street with buildings, trees, etc. No cups are present. So the answer is no.\n</think>\n\nno<|im_end|>",
+      "thinking_words": 0,
+      "extracted": "No",
+      "correct": true
+    },
+    {
+      "index": 58,
+      "question": "Is there a traffic light in the image?",
+      "answer": "Yes",
+      "category": "popular",
+      "raw": "So, let's check the image. In the background, there's a traffic light visible. The traffic light is hanging or maybe mounted on the side, but yes, there's a traffic light in the image. So the answer is yes.\n</think>\n\nyes<|im_end|>",
+      "thinking_words": 0,
+      "extracted": "Yes",
+      "correct": true
+    },
+    {
+      "index": 59,
+      "question": "Is there a dining table in the image?",
+      "answer": "No",
+      "category": "popular",
+      "raw": "So, let's look at the image. The picture is taken from inside a car, showing the dashboard and windshield. There are items like flowers, a clock, and some decorations. But is there a dining table? Dining tables are usually for eating, and this image is inside a car, so there's no dining table here. The answer should be no.\n</think>\n\nno<|im_end|>",
+      "thinking_words": 0,
+      "extracted": "No",
+      "correct": true
+    },
+    {
+      "index": 60,
+      "question": "Is there a person in the image?",
+      "answer": "Yes",
+      "category": "popular",
+      "raw": "So, let's look at the image. There are people visible through the car window. For example, there's a person in a white shirt, another in an orange headscarf, and maybe others. So yes, there are people.\n</think>\n\nyes<|im_end|>",
+      "thinking_words": 0,
+      "extracted": "Yes",
+      "correct": true
+    },
+    {
+      "index": 61,
+      "question": "Is there a chair in the image?",
+      "answer": "No",
+      "category": "popular",
+      "raw": "So, let's look at the image. The question is whether there's a chair. First, check the visible elements. The image shows a car's interior, with decorations like flowers, a clock, and some people outside. There's no chair visible in the car or anywhere else. So the answer should be no.\n</think>\n\nno<|im_end|>",
+      "thinking_words": 0,
+      "extracted": "No",
+      "correct": true
+    },
+    {
+      "index": 62,
+      "question": "Is there a car in the image?",
+      "answer": "Yes",
+      "category": "popular",
+      "raw": "So, let's look at the image. The picture shows the interior of a car, right? There's a dashboard with items like flowers, a clock, and the windshield. Also, outside the car, there are other vehicles. So yes, there is a car in the image.\n</think>\n\nyes<|im_end|>",
+      "thinking_words": 0,
+      "extracted": "Yes",
+      "correct": true
+    },
+    {
+      "index": 63,
+      "question": "Is there a cup in the image?",
+      "answer": "No",
+      "category": "popular",
+      "raw": "So, let's look at the image. The question is whether there's a cup. First, check the dashboard area. There are flowers, a clock, some decorations. Wait, is there a cup? Let me scan again. The items visible: flowers, a clock, maybe a small container? Wait, no, the image shows a car's interior with decorations like flowers, a clock, and maybe a small object. But no cup is visible. So the answer is no.\n</think>\n\nno<|im_end|>",
+      "thinking_words": 0,
+      "extracted": "No",
+      "correct": true
+    },
+    {
+      "index": 64,
+      "question": "Is there a dog in the image?",
+      "answer": "Yes",
+      "category": "popular",
+      "raw": "So, let's look at the image. There's a white fluffy dog lying on a table next to a newspaper and a cup. So the answer should be yes.\n</think>\n\nyes<|im_end|>",
+      "thinking_words": 0,
+      "extracted": "Yes",
+      "correct": true
+    },
+    {
+      "index": 65,
+      "question": "Is there a person in the image?",
+      "answer": "No",
+      "category": "popular",
+      "raw": "So, let's look at the image. The picture shows a white dog, a newspaper, a cup, and some background. There's no person visible in the image. So the answer is no.\n</think>\n\nno<|im_end|>",
+      "thinking_words": 0,
+      "extracted": "No",
+      "correct": true
+    },
+    {
+      "index": 66,
+      "question": "Is there a dining table in the image?",
+      "answer": "Yes",
+      "category": "popular",
+      "raw": "So, let's look at the image. The dog is lying on a surface that looks like a countertop or table. The surface has a pattern, and there's a newspaper and a cup. Dining tables are usually for eating, but this might be a kitchen counter. Wait, the question is if there's a dining table. But maybe the surface is a dining table. Let me check. The image shows a countertop with a newspaper, cup, and dog. Dining tables are typically in dining areas, but maybe this is a kitchen counter. However, the quest",
+      "thinking_words": 0,
+      "extracted": "Unknown",
+      "correct": false
+    },
+    {
+      "index": 67,
+      "question": "Is there a snowboard in the image?",
+      "answer": "Yes",
+      "category": "adversarial",
+      "raw": "So, let's look at the image. There's a person skiing or snowboarding down a snowy slope. Wait, the person is wearing a red jacket and dark pants, and they're on a snow-covered hill. The question is if there's a snowboard. Let me check. Snowboarding is a different activity than skiing, but in the image, the person is moving down the slope, and the equipment they're using\u2014since it's a snowboard, but wait, maybe it's a snowboard. Wait, no, the person is on a snowboard? Wait, the image shows a perso",
+      "thinking_words": 0,
+      "extracted": "Unknown",
+      "correct": false
+    },
+    {
+      "index": 68,
+      "question": "Is there a backpack in the image?",
+      "answer": "No",
+      "category": "adversarial",
+      "raw": "So, let's look at the image. The person skiing is wearing a red jacket, but do they have a backpack? The image shows a skier in the middle of the snowy slope. I don't see any backpack visible. So the answer should be no.\n</think>\n\nno<|im_end|>",
+      "thinking_words": 0,
+      "extracted": "No",
+      "correct": true
+    },
+    {
+      "index": 69,
+      "question": "Is there a person in the image?",
+      "answer": "Yes",
+      "category": "adversarial",
+      "raw": "So, let's look at the image. There's a person skiing down the snowy slope. The person is wearing a red jacket and dark pants, and they're in the middle of the snow. So yes, there is a person.\n</think>\n\nyes<|im_end|>",
+      "thinking_words": 0,
+      "extracted": "Yes",
+      "correct": true
+    },
+    {
+      "index": 70,
+      "question": "Is there a car in the image?",
+      "answer": "No",
+      "category": "adversarial",
+      "raw": "So, let's look at the image. The picture shows a snowy slope with a person skiing. There's no car visible in the scene. The focus is on the skier and the snow. So the answer should be no.\n</think>\n\nno<|im_end|>",
+      "thinking_words": 0,
+      "extracted": "No",
+      "correct": true
+    },
+    {
+      "index": 71,
+      "question": "Is there a skis in the image?",
+      "answer": "Yes",
+      "category": "adversarial",
+      "raw": "So, let's look at the image. There's a person skiing down a snowy slope. The person is wearing a red jacket and dark pants, and they're on skis. So, yes, there are skis in the image.\n</think>\n\nyes<|im_end|>",
+      "thinking_words": 0,
+      "extracted": "Yes",
+      "correct": true
+    },
+    {
+      "index": 72,
+      "question": "Is there a dog in the image?",
+      "answer": "No",
+      "category": "adversarial",
+      "raw": "So, let's look at the image. The picture shows a snowy slope with a person skiing or snowboarding. There's no dog visible in the scene. So the answer should be no.\n</think>\n\nno<|im_end|>",
+      "thinking_words": 0,
+      "extracted": "No",
+      "correct": true
+    },
+    {
+      "index": 73,
+      "question": "Is there a truck in the image?",
+      "answer": "Yes",
+      "category": "adversarial",
+      "raw": "So, let's look at the image. In the background, there's a black truck parked on the grassy area. So yes, there is a truck.\n</think>\n\nyes<|im_end|>",
+      "thinking_words": 0,
+      "extracted": "Yes",
+      "correct": true
+    },
+    {
+      "index": 74,
+      "question": "Is there a car in the image?",
+      "answer": "No",
+      "category": "adversarial",
+      "raw": "So, let's look at the image. In the background, there's a black truck parked on the grassy area. So yes, there is a car.\n</think>\n\nyes<|im_end|>",
+      "thinking_words": 0,
+      "extracted": "Yes",
+      "correct": false
+    },
+    {
+      "index": 75,
+      "question": "Is there a person in the image?",
+      "answer": "Yes",
+      "category": "adversarial",
+      "raw": "So, let's look at the image. There are two people: an adult and a child. The adult is holding a red and black umbrella, and the child is standing next to them. So yes, there are people in the image.\n</think>\n\nyes<|im_end|>",
+      "thinking_words": 0,
+      "extracted": "Yes",
+      "correct": true
+    },
+    {
+      "index": 76,
+      "question": "Is there a dining table in the image?",
+      "answer": "No",
+      "category": "adversarial",
+      "raw": "So, let's look at the image. The scene is outdoors, a rainy day, with two people under a red and black umbrella. There's a wet driveway, grass, a car, and some buildings in the background. No dining table is visible here. So the answer is no.\n</think>\n\nno<|im_end|>",
+      "thinking_words": 0,
+      "extracted": "No",
+      "correct": true
+    },
+    {
+      "index": 77,
+      "question": "Is there an umbrella in the imange?",
+      "answer": "Yes",
+      "category": "adversarial",
+      "raw": "So, let's look at the image. There's a person holding a red and black umbrella. So yes, there is an umbrella.\n</think>\n\nyes<|im_end|>",
+      "thinking_words": 0,
+      "extracted": "Yes",
+      "correct": true
+    },
+    {
+      "index": 78,
+      "question": "Is there a handbag in the image?",
+      "answer": "No",
+      "category": "adversarial",
+      "raw": "So, let's look at the image. The picture shows a person holding a red and black umbrella, standing with a child. There's no handbag visible in the scene. The background has a car, grass, and a building, but no handbag. So the answer is no.\n</think>\n\nno<|im_end|>",
+      "thinking_words": 0,
+      "extracted": "No",
+      "correct": true
+    },
+    {
+      "index": 79,
+      "question": "Is there a person in the image?",
+      "answer": "Yes",
+      "category": "adversarial",
+      "raw": "So, let's check the image. There are people visible. For example, near the bus stop, there are people. Also, the van has a person inside. So yes, there are people.\n</think>\n\nyes<|im_end|>",
+      "thinking_words": 0,
+      "extracted": "Yes",
+      "correct": true
+    },
+    {
+      "index": 80,
+      "question": "Is there a dining table in the image?",
+      "answer": "No",
+      "category": "adversarial",
+      "raw": "So, let's look at the image. The scene is a bus station with buses, a van, palm trees, buildings, etc. There's no dining table visible. So the answer is no.\n</think>\n\nno<|im_end|>",
+      "thinking_words": 0,
+      "extracted": "No",
+      "correct": true
+    },
+    {
+      "index": 81,
+      "question": "Is there a bicycle in the image?",
+      "answer": "Yes",
+      "category": "adversarial",
+      "raw": "So, let's look at the image. In the lower right area, there's a person riding a bicycle. So yes, there is a bicycle.\n</think>\n\nyes<|im_end|>",
+      "thinking_words": 0,
+      "extracted": "Yes",
+      "correct": true
+    },
+    {
+      "index": 82,
+      "question": "Is there a motorcycle in the image?",
+      "answer": "No",
+      "category": "adversarial",
+      "raw": "So, let's look at the image. The question is whether there's a motorcycle. Let's check all elements. There's a bus, a van, trams, a bicycle (a person is riding a bike), but no motorcycle. So the answer is no.\n</think>\n\nno<|im_end|>",
+      "thinking_words": 0,
+      "extracted": "No",
+      "correct": true
+    },
+    {
+      "index": 83,
+      "question": "Is there a car in the image?",
+      "answer": "Yes",
+      "category": "adversarial",
+      "raw": "So, let's check the image. The question is whether there's a car. Looking at the image, there are buses, a van, but no cars. Wait, the image shows a bus stop with buses, a van, and some people. Are there any cars? Let me scan again. The vehicles present are the green and red buses, the white van, and maybe some other vehicles? Wait, no, the image doesn't show any cars. So the answer is no.\n</think>\n\nno<|im_end|>",
+      "thinking_words": 0,
+      "extracted": "No",
+      "correct": false
+    },
+    {
+      "index": 84,
+      "question": "Is there a truck in the image?",
+      "answer": "No",
+      "category": "adversarial",
+      "raw": "So, let's look at the image. The question is whether there's a truck. First, check all vehicles. There's a white van labeled \"UNI EXPRESS\" which is a type of truck? Wait, vans can be considered trucks in some contexts, but let's see. The van is a small bus or van, but maybe the question is about a truck. Wait, the image has a white van, which is a type of truck? Wait, no, a van is a type of vehicle, but maybe the question is looking for a truck. Let's check the vehicles: there's a bus, a tram, a",
+      "thinking_words": 0,
+      "extracted": "Yes",
+      "correct": false
+    },
+    {
+      "index": 85,
+      "question": "Is there a person in the image?",
+      "answer": "Yes",
+      "category": "adversarial",
+      "raw": "So, let's check the image. There's a red double-decker bus with people on the top deck. Some people are waving, others are standing. So there are people in the image. The answer should be yes.\n</think>\n\nyes<|im_end|>",
+      "thinking_words": 0,
+      "extracted": "Yes",
+      "correct": true
+    },
+    {
+      "index": 86,
+      "question": "Is there a dining table in the image?",
+      "answer": "No",
+      "category": "adversarial",
+      "raw": "So, let's look at the image. The picture shows a red double-decker bus with people on the top. There's a street, some buildings, trees, but no dining table visible. So the answer is no.\n</think>\n\nno<|im_end|>",
+      "thinking_words": 0,
+      "extracted": "No",
+      "correct": true
+    },
+    {
+      "index": 87,
+      "question": "Is there a potted plant in the image?",
+      "answer": "Yes",
+      "category": "adversarial",
+      "raw": "So, let's check the image. Looking around, there's a tree on the left side near the building, but are there potted plants? Wait, the question is about potted plants. Let me scan the scene. The image shows a double-decker bus, some buildings, a street. Do I see any plants in pots? Hmm, maybe not. Let's check again. The left side has a palm tree, but is that a potted plant? No, it's a tree outside. So there are no potted plants in the image. So the answer is no.\n</think>\n\nno<|im_end|>",
+      "thinking_words": 0,
+      "extracted": "No",
+      "correct": false
+    },
+    {
+      "index": 88,
+      "question": "Is there a vase in the image?",
+      "answer": "No",
+      "category": "adversarial",
+      "raw": "So, let's check the image. The question is whether there's a vase. Looking at the scene: a red double-decker bus with \"Ruta del Arroz\" on it, people on the top, buildings, trees, street. No vases are visible. So the answer is no.\n</think>\n\nno<|im_end|>",
+      "thinking_words": 0,
+      "extracted": "No",
+      "correct": true
+    },
+    {
+      "index": 89,
+      "question": "Is there a car in the image?",
+      "answer": "Yes",
+      "category": "adversarial",
+      "raw": "So, let's check the image. The main subject is a red double-decker bus. Are there any cars? Looking around, in the background, there might be some vehicles, but the question is if there's a car. Wait, the image shows a bus, and maybe other cars in the distance. But the question is asking if there's a car. Let me see. The bus is the main thing, but are there cars? Let's check. The image has a bus, and maybe some other vehicles. Wait, the problem is to answer yes or no. So, is there a car? Let's l",
+      "thinking_words": 0,
+      "extracted": "Unknown",
+      "correct": false
+    },
+    {
+      "index": 90,
+      "question": "Is there a truck in the image?",
+      "answer": "No",
+      "category": "adversarial",
+      "raw": "So, let's look at the image. The main vehicle is a red double-decker bus. Are there any trucks? Let's check. The bus is the only vehicle visible. There's no truck in the image. So the answer is no.\n</think>\n\nno<|im_end|>",
+      "thinking_words": 0,
+      "extracted": "No",
+      "correct": true
+    },
+    {
+      "index": 91,
+      "question": "Is there a traffic light in the image?",
+      "answer": "Yes",
+      "category": "adversarial",
+      "raw": "So, let's check the image. In the background, there's a traffic light visible. The traffic light is hanging or maybe mounted on the side, but yes, there's a traffic light in the image. So the answer is yes.\n</think>\n\nyes<|im_end|>",
+      "thinking_words": 0,
+      "extracted": "Yes",
+      "correct": true
+    },
+    {
+      "index": 92,
+      "question": "Is there a bus in the image?",
+      "answer": "No",
+      "category": "adversarial",
+      "raw": "So, let's look at the image. In the background, there's a white vehicle that looks like a bus. Wait, the question is if there's a bus. Let me check. The image shows a car's interior, and behind the windshield, there's a white bus. So yes, there is a bus.\n</think>\n\nyes<|im_end|>",
+      "thinking_words": 0,
+      "extracted": "Yes",
+      "correct": false
+    },
+    {
+      "index": 93,
+      "question": "Is there a person in the image?",
+      "answer": "Yes",
+      "category": "adversarial",
+      "raw": "So, let's look at the image. There are people visible through the car window. For example, there's a person in a white shirt, another in an orange headscarf, and maybe others. So yes, there are people.\n</think>\n\nyes<|im_end|>",
+      "thinking_words": 0,
+      "extracted": "Yes",
+      "correct": true
+    },
+    {
+      "index": 94,
+      "question": "Is there a dining table in the image?",
+      "answer": "No",
+      "category": "adversarial",
+      "raw": "So, let's look at the image. The picture is taken from inside a car, showing the dashboard and windshield. There are items like flowers, a clock, and some decorations. But is there a dining table? Dining tables are usually for eating, and this image is inside a car, so there's no dining table here. The answer should be no.\n</think>\n\nno<|im_end|>",
+      "thinking_words": 0,
+      "extracted": "No",
+      "correct": true
+    },
+    {
+      "index": 95,
+      "question": "Is there a car in the image?",
+      "answer": "Yes",
+      "category": "adversarial",
+      "raw": "So, let's look at the image. The picture shows the interior of a car, right? There's a dashboard with items like flowers, a clock, and the windshield. Also, outside the car, there are other vehicles. So yes, there is a car in the image.\n</think>\n\nyes<|im_end|>",
+      "thinking_words": 0,
+      "extracted": "Yes",
+      "correct": true
+    },
+    {
+      "index": 96,
+      "question": "Is there a truck in the image?",
+      "answer": "No",
+      "category": "adversarial",
+      "raw": "So, let's look at the image. The background shows a busy street with vehicles. There's a white van or maybe a truck? Wait, the question is if there's a truck. Let me check. The image has cars, but is there a truck? Hmm, the vehicles in the background\u2014maybe a truck. Wait, the white vehicle in the background, but maybe it's a van. Wait, no, the question is about a truck. Let me see. The image shows a car's interior, and outside, there are other vehicles. Wait, maybe there's a truck. Wait, the whit",
+      "thinking_words": 0,
+      "extracted": "Unknown",
+      "correct": false
+    },
+    {
+      "index": 97,
+      "question": "Is there a dog in the image?",
+      "answer": "Yes",
+      "category": "adversarial",
+      "raw": "So, let's look at the image. There's a white fluffy dog lying on a table next to a newspaper and a cup. So the answer should be yes.\n</think>\n\nyes<|im_end|>",
+      "thinking_words": 0,
+      "extracted": "Yes",
+      "correct": true
+    },
+    {
+      "index": 98,
+      "question": "Is there a person in the image?",
+      "answer": "No",
+      "category": "adversarial",
+      "raw": "So, let's look at the image. The picture shows a white dog, a newspaper, a cup, and some background. There's no person visible in the image. So the answer is no.\n</think>\n\nno<|im_end|>",
+      "thinking_words": 0,
+      "extracted": "No",
+      "correct": true
+    },
+    {
+      "index": 99,
+      "question": "Is there a dining table in the image?",
+      "answer": "Yes",
+      "category": "adversarial",
+      "raw": "So, let's look at the image. The dog is lying on a surface that looks like a countertop or table. The surface has a pattern, and there's a newspaper and a cup. Dining tables are usually for eating, but this might be a kitchen counter. Wait, the question is if there's a dining table. But maybe the surface is a dining table. Let me check. The image shows a countertop with a newspaper, cup, and dog. Dining tables are typically in dining areas, but maybe this is a kitchen counter. However, the quest",
+      "thinking_words": 0,
+      "extracted": "Unknown",
+      "correct": false
+    }
+  ],
+  "exp10_records": [
+    {
+      "index": 0,
+      "question": "Is there a snowboard in the image?",
+      "answer": "Yes",
+      "category": "random",
+      "raw": "So, let's look at the image. There's a person skiing or snowboarding down a snowy slope. Wait, the person is wearing a red jacket and dark pants, and they're on a snow-covered hill. The question is if there's a snowboard. Let me check. Snowboarding is a different activity than skiing, but in the image, the person is moving down the slope, and the equipment they're using\u2014since it's a snowboard, but wait, maybe it's a snowboard. Wait, no, the person is on a snowboard? Wait, the image shows a perso",
+      "thinking_words": 0,
+      "extracted": "Unknown",
+      "correct": false
+    },
+    {
+      "index": 1,
+      "question": "Is there a car in the image?",
+      "answer": "No",
+      "category": "random",
+      "raw": "So, let's look at the image. The picture shows a snowy slope with a person skiing. There's no car visible in the scene. The focus is on the skier and the snow. So the answer should be no.\n</think>\n\nno<|im_end|>",
+      "thinking_words": 0,
+      "extracted": "No",
+      "correct": true
+    },
+    {
+      "index": 2,
+      "question": "Is there a person in the image?",
+      "answer": "Yes",
+      "category": "random",
+      "raw": "So, let's look at the image. There's a person skiing down the snowy slope. The person is wearing a red jacket and dark pants, and they're on a snowboard or skis. So yes, there is a person in the image.\n</think>\n\nyes<|im_end|>",
+      "thinking_words": 0,
+      "extracted": "Yes",
+      "correct": true
+    },
+    {
+      "index": 3,
+      "question": "Is there a sandwich in the image?",
+      "answer": "No",
+      "category": "random",
+      "raw": "So, let's look at the image. The picture shows a snowy mountain with a person skiing. There's no sandwich visible in the image. The question is asking if there's a sandwich, so the answer should be no.\n</think>\n\nno<|im_end|>",
+      "thinking_words": 0,
+      "extracted": "No",
+      "correct": true
+    },
+    {
+      "index": 4,
+      "question": "Is there a skis in the image?",
+      "answer": "Yes",
+      "category": "random",
+      "raw": "So, let's look at the image. There's a person skiing down a snowy slope. The person is wearing a red jacket and dark pants, and they're on skis. So, yes, there are skis in the image.\n</think>\n\nyes<|im_end|>",
+      "thinking_words": 0,
+      "extracted": "Yes",
+      "correct": true
+    },
+    {
+      "index": 5,
+      "question": "Is there a couch in the image?",
+      "answer": "No",
+      "category": "random",
+      "raw": "So, let's look at the image. The picture shows a snowy mountain slope with a person skiing. There's no couch visible in the scene. The background is all snow, and there's no furniture or couch. So the answer is no.\n</think>\n\nno<|im_end|>",
+      "thinking_words": 0,
+      "extracted": "No",
+      "correct": true
+    },
+    {
+      "index": 6,
+      "question": "Is there a truck in the image?",
+      "answer": "Yes",
+      "category": "random",
+      "raw": "So, let's look at the image. In the background, there's a black truck parked on the grassy area. So yes, there is a truck.\n</think>\n\nyes<|im_end|>",
+      "thinking_words": 0,
+      "extracted": "Yes",
+      "correct": true
+    },
+    {
+      "index": 7,
+      "question": "Is there a pizza in the image?",
+      "answer": "No",
+      "category": "random",
+      "raw": "So, let's look at the image. The picture shows two people under an umbrella on a wet street. There's no pizza visible anywhere in the scene. The background has a house, a truck, grass, and trees. No food items like pizza are present. So the answer is no.\n</think>\n\nno<|im_end|>",
+      "thinking_words": 0,
+      "extracted": "No",
+      "correct": true
+    },
+    {
+      "index": 8,
+      "question": "Is there a person in the image?",
+      "answer": "Yes",
+      "category": "random",
+      "raw": "So, let's look at the image. There are two people: an adult and a child. The adult is holding a red and black umbrella, and the child is standing next to them. So yes, there are people in the image.\n</think>\n\nyes<|im_end|>",
+      "thinking_words": 0,
+      "extracted": "Yes",
+      "correct": true
+    },
+    {
+      "index": 9,
+      "question": "Is there a sink in the image?",
+      "answer": "No",
+      "category": "random",
+      "raw": "So, let's look at the image. The picture shows two people under an umbrella on a wet street. There's a grassy area, a car, and some buildings in the background. I don't see any sink in the image. Sinks are usually in kitchens or bathrooms, which aren't present here. So the answer is no.\n</think>\n\nno<|im_end|>",
+      "thinking_words": 0,
+      "extracted": "No",
+      "correct": true
+    },
+    {
+      "index": 10,
+      "question": "Is there an umbrella in the image?",
+      "answer": "Yes",
+      "category": "random",
+      "raw": "So, let's look at the image. There's a person holding a red and black umbrella. So yes, there is an umbrella.\n</think>\n\nyes<|im_end|>",
+      "thinking_words": 0,
+      "extracted": "Yes",
+      "correct": true
+    },
+    {
+      "index": 11,
+      "question": "Is there a cell phone in the image?",
+      "answer": "No",
+      "category": "random",
+      "raw": "So, let's look at the image. The picture shows a person holding a red and black umbrella, standing with a child. There's no cell phone visible in the scene. The background has a car, grass, and a building, but no cell phone. So the answer is no.\n</think>\n\nno<|im_end|>",
+      "thinking_words": 0,
+      "extracted": "No",
+      "correct": true
+    },
+    {
+      "index": 12,
+      "question": "Is there a person in the image?",
+      "answer": "Yes",
+      "category": "random",
+      "raw": "So, let's check the image. There are people visible. For example, near the bus stop, there are people. Also, the van has a person inside. So yes, there are people.\n</think>\n\nyes<|im_end|>",
+      "thinking_words": 0,
+      "extracted": "Yes",
+      "correct": true
+    },
+    {
+      "index": 13,
+      "question": "Is there a sheep in the image?",
+      "answer": "No",
+      "category": "random",
+      "raw": "So, let's look at the image. The scene is a bus station with various vehicles: buses, a van, palm trees, buildings. There's no sheep visible. So the answer is no.\n</think>\n\nno<|im_end|>",
+      "thinking_words": 0,
+      "extracted": "No",
+      "correct": true
+    },
+    {
+      "index": 14,
+      "question": "Is there a bicycle in the image?",
+      "answer": "Yes",
+      "category": "random",
+      "raw": "So, let's look at the image. In the lower right area, there's a person riding a bicycle. So yes, there is a bicycle.\n</think>\n\nyes<|im_end|>",
+      "thinking_words": 0,
+      "extracted": "Yes",
+      "correct": true
+    },
+    {
+      "index": 15,
+      "question": "Is there a broccoli in the image?",
+      "answer": "No",
+      "category": "random",
+      "raw": "So, let's look at the image. The question is asking if there's broccoli. Broccoli is a vegetable, and in the image, there are buses, palm trees, buildings, etc. I don't see any broccoli. So the answer is no.\n</think>\n\nno<|im_end|>",
+      "thinking_words": 0,
+      "extracted": "No",
+      "correct": true
+    },
+    {
+      "index": 16,
+      "question": "Is there a car in the image?",
+      "answer": "Yes",
+      "category": "random",
+      "raw": "So, let's check the image. The question is whether there's a car. Looking at the image, there are buses, a van, but no cars. Wait, the image shows a bus stop with buses, a van, and some people. Are there any cars? Let me scan again. The vehicles present are the green and red buses, the white van, and maybe some other small vehicles? Wait, no, the image doesn't show any cars. So the answer is no.\n</think>\n\nno<|im_end|>",
+      "thinking_words": 0,
+      "extracted": "No",
+      "correct": false
+    },
+    {
+      "index": 17,
+      "question": "Is there a tennis racket in the image?",
+      "answer": "No",
+      "category": "random",
+      "raw": "So, let's look at the image. The scene is a bus station with buses, a van, palm trees, buildings. There's no tennis racket visible. So the answer is no.\n</think>\n\nno<|im_end|>",
+      "thinking_words": 0,
+      "extracted": "No",
+      "correct": true
+    },
+    {
+      "index": 18,
+      "question": "Is there a person in the image?",
+      "answer": "Yes",
+      "category": "random",
+      "raw": "So, let's check the image. There's a red double-decker bus with people on the top deck. Some people are waving, others are standing. So there are people in the image. The answer should be yes.\n</think>\n\nyes<|im_end|>",
+      "thinking_words": 0,
+      "extracted": "Yes",
+      "correct": true
+    },
+    {
+      "index": 19,
+      "question": "Is there a teddy bear in the image?",
+      "answer": "No",
+      "category": "random",
+      "raw": "So, let's look at the image. The picture shows a red double-decker bus with people on the top. There's no teddy bear visible anywhere in the scene. The bus has a sign \"Ruta del Arroz,\" and the surroundings are a street with buildings and trees. No teddy bear is present. So the answer is no.\n</think>\n\nno<|im_end|>",
+      "thinking_words": 0,
+      "extracted": "No",
+      "correct": true
+    },
+    {
+      "index": 20,
+      "question": "Is there a potted plant in the image?",
+      "answer": "Yes",
+      "category": "random",
+      "raw": "So, let's check the image. Looking around, there's a tree on the left side near the building, but are there potted plants? Wait, the question is about potted plants. Let me scan the scene. The image shows a double-decker bus, some buildings, a street. Do I see any plants in pots? Hmm, maybe not. Let's check again. The left side has a palm tree, but is that a potted plant? No, it's a tree outside. So there are no potted plants in the image. So the answer is no.\n</think>\n\nno<|im_end|>",
+      "thinking_words": 0,
+      "extracted": "No",
+      "correct": false
+    },
+    {
+      "index": 21,
+      "question": "Is there a broccoli in the image?",
+      "answer": "No",
+      "category": "random",
+      "raw": "So, let's check the image. The bus has a sign that says \"RUTA DEL ARROZ\" which is Spanish for \"Rice Route\". There's no broccoli visible in the image. Broccoli is a vegetable, and the image shows a red double-decker bus with people on it, a street scene. So the answer is no.\n</think>\n\nno<|im_end|>",
+      "thinking_words": 0,
+      "extracted": "No",
+      "correct": true
+    },
+    {
+      "index": 22,
+      "question": "Is there a car in the image?",
+      "answer": "Yes",
+      "category": "random",
+      "raw": "So, let's check the image. The main subject is a red double-decker bus. Are there any cars? Looking around, in the background, there might be some vehicles, but the question is if there's a car. Wait, the image shows a bus, and maybe other cars in the distance. But the question is asking if there's a car. Let me see. The bus is the main thing, but are there cars? Let's check. The image has a bus, and maybe some other vehicles. Wait, the problem is to answer yes or no. So, is there a car? Let's l",
+      "thinking_words": 0,
+      "extracted": "Unknown",
+      "correct": false
+    },
+    {
+      "index": 23,
+      "question": "Is there an orange in the image?",
+      "answer": "No",
+      "category": "random",
+      "raw": "So, let's check the image. The bus is red, and there's a sign that says \"RUTA DEL ARROZ\" with a wheat symbol. Are there any oranges? Looking at the scene: the bus, people, buildings, trees\u2014no oranges visible. So the answer is no.\n</think>\n\nno<|im_end|>",
+      "thinking_words": 0,
+      "extracted": "No",
+      "correct": true
+    },
+    {
+      "index": 24,
+      "question": "Is there a traffic light in the image?",
+      "answer": "Yes",
+      "category": "random",
+      "raw": "So, let's check the image. In the background, there's a traffic light visible. The traffic light is hanging or maybe mounted on the side, but yes, there's a traffic light in the image. So the answer is yes.\n</think>\n\nyes<|im_end|>",
+      "thinking_words": 0,
+      "extracted": "Yes",
+      "correct": true
+    },
+    {
+      "index": 25,
+      "question": "Is there a train in the image?",
+      "answer": "No",
+      "category": "random",
+      "raw": "So, let's look at the image. The scene is inside a car, and there are other vehicles around. But is there a train? Let's check. The background shows some buildings and maybe other cars, but no train is visible. So the answer is no.\n</think>\n\nno<|im_end|>",
+      "thinking_words": 0,
+      "extracted": "No",
+      "correct": true
+    },
+    {
+      "index": 26,
+      "question": "Is there a person in the image?",
+      "answer": "Yes",
+      "category": "random",
+      "raw": "So, let's look at the image. There are people visible through the car window. For example, there's a person in a white shirt, another in an orange headscarf, and maybe others. So yes, there are people.\n</think>\n\nyes<|im_end|>",
+      "thinking_words": 0,
+      "extracted": "Yes",
+      "correct": true
+    },
+    {
+      "index": 27,
+      "question": "Is there a surfboard in the image?",
+      "answer": "No",
+      "category": "random",
+      "raw": "So, let's look at the image. The scene is inside a car, with decorations like flowers, a clock, and some items. There's no surfboard visible. The background shows a street with other vehicles and people. So the answer is no.\n</think>\n\nno<|im_end|>",
+      "thinking_words": 0,
+      "extracted": "No",
+      "correct": true
+    },
+    {
+      "index": 28,
+      "question": "Is there a car in the image?",
+      "answer": "Yes",
+      "category": "random",
+      "raw": "So, let's look at the image. The picture shows the interior of a car, right? There's a dashboard with items like flowers, a clock, and the windshield. Also, outside the car, there are other vehicles. So yes, there is a car in the image.\n</think>\n\nyes<|im_end|>",
+      "thinking_words": 0,
+      "extracted": "Yes",
+      "correct": true
+    },
+    {
+      "index": 29,
+      "question": "Is there a kite in the image?",
+      "answer": "No",
+      "category": "random",
+      "raw": "So, let's look at the image. The question is if there's a kite. First, check all elements. The car's dashboard has flowers, a clock, maybe some decorations. There's a hanging thing that looks like grapes or something, but no kite. Kites are usually flown, like in the sky, but here it's inside a car. So no kite in the image.\n</think>\n\nno<|im_end|>",
+      "thinking_words": 0,
+      "extracted": "No",
+      "correct": true
+    },
+    {
+      "index": 30,
+      "question": "Is there a dog in the image?",
+      "answer": "Yes",
+      "category": "random",
+      "raw": "So, let's look at the image. There's a white fluffy dog lying on a table next to a newspaper and a cup. So the answer should be yes.\n</think>\n\nyes<|im_end|>",
+      "thinking_words": 0,
+      "extracted": "Yes",
+      "correct": true
+    },
+    {
+      "index": 31,
+      "question": "Is there a toaster in the image?",
+      "answer": "No",
+      "category": "random",
+      "raw": "So, let's look at the image. The picture shows a white fluffy dog, a newspaper, a cup, and some other items. There's no toaster visible. So the answer is no.\n</think>\n\nno<|im_end|>",
+      "thinking_words": 0,
+      "extracted": "No",
+      "correct": true
+    },
+    {
+      "index": 32,
+      "question": "Is there a dining table in the image?",
+      "answer": "Yes",
+      "category": "random",
+      "raw": "So, let's look at the image. The dog is on a surface that looks like a countertop or table. The surface has a pattern, and there's a newspaper and a cup. Dining tables are usually for eating, but this might be a kitchen counter. Wait, the question is if there's a dining table. But maybe the surface is a dining table. Let me check. The image shows a surface with a newspaper, a cup, and the dog. Dining tables are typically in dining areas, but maybe this is a table. Wait, the answer should be yes ",
+      "thinking_words": 0,
+      "extracted": "Yes",
+      "correct": true
+    },
+    {
+      "index": 33,
+      "question": "Is there a sports ball in the image?",
+      "answer": "No",
+      "category": "random",
+      "raw": "So, let's look at the image. The picture shows a white dog, a newspaper, a cup, and some other items. There's no sports ball visible. So the answer is no.\n</think>\n\nno<|im_end|>",
+      "thinking_words": 0,
+      "extracted": "No",
+      "correct": true
+    },
+    {
+      "index": 34,
+      "question": "Is there a snowboard in the image?",
+      "answer": "Yes",
+      "category": "popular",
+      "raw": "So, let's look at the image. There's a person skiing or snowboarding down a snowy slope. Wait, the person is wearing a red jacket and dark pants, and they're on a snow-covered hill. The question is if there's a snowboard. Let me check. Snowboarding is a different activity than skiing, but in the image, the person is moving down the slope, and the equipment they're using\u2014since it's a snowboard, but wait, maybe it's a snowboard. Wait, no, the person is on a snowboard? Wait, the image shows a perso",
+      "thinking_words": 0,
+      "extracted": "Unknown",
+      "correct": false
+    },
+    {
+      "index": 35,
+      "question": "Is there a dining table in the image?",
+      "answer": "No",
+      "category": "popular",
+      "raw": "So, let's look at the image. The picture shows a snowy mountain slope with a person skiing. There's no dining table here. Dining tables are for eating, and this image is all about skiing and snow. So the answer is no.\n</think>\n\nno<|im_end|>",
+      "thinking_words": 0,
+      "extracted": "No",
+      "correct": true
+    },
+    {
+      "index": 36,
+      "question": "Is there a person in the image?",
+      "answer": "Yes",
+      "category": "popular",
+      "raw": "So, let's look at the image. There's a person skiing down the snowy slope. The person is wearing a red jacket and dark pants, and they're on a snowboard or skis. So yes, there is a person in the image.\n</think>\n\nyes<|im_end|>",
+      "thinking_words": 0,
+      "extracted": "Yes",
+      "correct": true
+    },
+    {
+      "index": 37,
+      "question": "Is there a car in the image?",
+      "answer": "No",
+      "category": "popular",
+      "raw": "So, let's look at the image. The picture shows a snowy slope with a person skiing. There's no car visible in the scene. The focus is on the skier and the snow. So the answer should be no.\n</think>\n\nno<|im_end|>",
+      "thinking_words": 0,
+      "extracted": "No",
+      "correct": true
+    },
+    {
+      "index": 38,
+      "question": "Is there a skis in the image?",
+      "answer": "Yes",
+      "category": "popular",
+      "raw": "So, let's look at the image. There's a person skiing down a snowy slope. The person is wearing a red jacket and dark pants, and they're on skis. So, yes, there are skis in the image.\n</think>\n\nyes<|im_end|>",
+      "thinking_words": 0,
+      "extracted": "Yes",
+      "correct": true
+    },
+    {
+      "index": 39,
+      "question": "Is there a chair in the image?",
+      "answer": "No",
+      "category": "popular",
+      "raw": "So, let's look at the image. The picture shows a snowy slope with a person skiing. There's no chair visible in the scene. The question is asking if there's a chair, so I need to check. No chairs are present. So the answer is no.\n</think>\n\nno<|im_end|>",
+      "thinking_words": 0,
+      "extracted": "No",
+      "correct": true
+    },
+    {
+      "index": 40,
+      "question": "Is there a truck in the image?",
+      "answer": "Yes",
+      "category": "popular",
+      "raw": "So, let's look at the image. In the background, there's a black truck parked on the grassy area. So yes, there is a truck.\n</think>\n\nyes<|im_end|>",
+      "thinking_words": 0,
+      "extracted": "Yes",
+      "correct": true
+    },
+    {
+      "index": 41,
+      "question": "Is there a dining table in the image?",
+      "answer": "No",
+      "category": "popular",
+      "raw": "So, let's look at the image. The scene is outdoors, a rainy day, with two people under a red and black umbrella. There's a wet driveway, grass, a car, and some buildings in the background. No dining table is visible here. So the answer is no.\n</think>\n\nno<|im_end|>",
+      "thinking_words": 0,
+      "extracted": "No",
+      "correct": true
+    },
+    {
+      "index": 42,
+      "question": "Is there a person in the image?",
+      "answer": "Yes",
+      "category": "popular",
+      "raw": "So, let's look at the image. There are two people: an adult and a child. The adult is holding a red and black umbrella, and the child is standing next to them. So yes, there are people in the image.\n</think>\n\nyes<|im_end|>",
+      "thinking_words": 0,
+      "extracted": "Yes",
+      "correct": true
+    },
+    {
+      "index": 43,
+      "question": "Is there a car in the image?",
+      "answer": "No",
+      "category": "popular",
+      "raw": "So, let's look at the image. In the background, there's a black truck parked on the grassy area. So yes, there is a car.\n</think>\n\nyes<|im_end|>",
+      "thinking_words": 0,
+      "extracted": "Yes",
+      "correct": false
+    },
+    {
+      "index": 44,
+      "question": "Is there an umbrella in the image?",
+      "answer": "Yes",
+      "category": "popular",
+      "raw": "So, let's look at the image. There's a person holding a red and black umbrella. So yes, there is an umbrella.\n</think>\n\nyes<|im_end|>",
+      "thinking_words": 0,
+      "extracted": "Yes",
+      "correct": true
+    },
+    {
+      "index": 45,
+      "question": "Is there a chair in the image?",
+      "answer": "No",
+      "category": "popular",
+      "raw": "So, let's look at the image. The scene is outdoors, rainy, with two people under a red and black umbrella. There's a wet driveway, grass, a house, and a truck. I don't see any chairs in the image. So the answer is no.\n</think>\n\nno<|im_end|>",
+      "thinking_words": 0,
+      "extracted": "No",
+      "correct": true
+    },
+    {
+      "index": 46,
+      "question": "Is there a person in the image?",
+      "answer": "Yes",
+      "category": "popular",
+      "raw": "So, let's check the image. There are people visible. For example, near the bus stop, there are people. Also, the van has a person inside. So yes, there are people.\n</think>\n\nyes<|im_end|>",
+      "thinking_words": 0,
+      "extracted": "Yes",
+      "correct": true
+    },
+    {
+      "index": 47,
+      "question": "Is there a dining table in the image?",
+      "answer": "No",
+      "category": "popular",
+      "raw": "So, let's look at the image. The scene is a bus station with buses, a van, palm trees, buildings, etc. There's no dining table visible. So the answer is no.\n</think>\n\nno<|im_end|>",
+      "thinking_words": 0,
+      "extracted": "No",
+      "correct": true
+    },
+    {
+      "index": 48,
+      "question": "Is there a bicycle in the image?",
+      "answer": "Yes",
+      "category": "popular",
+      "raw": "So, let's look at the image. In the lower right area, there's a person riding a bicycle. So yes, there is a bicycle.\n</think>\n\nyes<|im_end|>",
+      "thinking_words": 0,
+      "extracted": "Yes",
+      "correct": true
+    },
+    {
+      "index": 49,
+      "question": "Is there a chair in the image?",
+      "answer": "No",
+      "category": "popular",
+      "raw": "So, let's look at the image. The scene is a bus station with buses, a van, palm trees, buildings. Are there any chairs? I don't see any chairs in the picture. So the answer is no.\n</think>\n\nno<|im_end|>",
+      "thinking_words": 0,
+      "extracted": "No",
+      "correct": true
+    },
+    {
+      "index": 50,
+      "question": "Is there a car in the image?",
+      "answer": "Yes",
+      "category": "popular",
+      "raw": "So, let's check the image. The question is whether there's a car. Looking at the image, there are buses, a van, but no cars. Wait, the image shows a bus stop with buses, a van, and some people. Are there any cars? Let me scan again. The vehicles present are the green and red buses, the white van, and maybe some other small vehicles? Wait, no, the image doesn't show any cars. So the answer is no.\n</think>\n\nno<|im_end|>",
+      "thinking_words": 0,
+      "extracted": "No",
+      "correct": false
+    },
+    {
+      "index": 51,
+      "question": "Is there a cup in the image?",
+      "answer": "No",
+      "category": "popular",
+      "raw": "So, let's check the image. The question is whether there's a cup. Looking at all the elements: buses, vans, buildings, palm trees, signs. I don't see any cups. So the answer is no.\n</think>\n\nno<|im_end|>",
+      "thinking_words": 0,
+      "extracted": "No",
+      "correct": true
+    },
+    {
+      "index": 52,
+      "question": "Is there a person in the image?",
+      "answer": "Yes",
+      "category": "popular",
+      "raw": "So, let's check the image. There's a red double-decker bus with people on the top deck. Some people are waving, others are standing. So there are people in the image. The answer should be yes.\n</think>\n\nyes<|im_end|>",
+      "thinking_words": 0,
+      "extracted": "Yes",
+      "correct": true
+    },
+    {
+      "index": 53,
+      "question": "Is there a dining table in the image?",
+      "answer": "No",
+      "category": "popular",
+      "raw": "So, let's look at the image. The picture shows a red double-decker bus with people on the top. There's a street, some buildings, trees, but no dining table. So the answer is no.\n</think>\n\nno<|im_end|>",
+      "thinking_words": 0,
+      "extracted": "No",
+      "correct": true
+    },
+    {
+      "index": 54,
+      "question": "Is there a potted plant in the image?",
+      "answer": "Yes",
+      "category": "popular",
+      "raw": "So, let's check the image. Looking around, there's a tree on the left side near the building, but are there potted plants? Wait, the question is about potted plants. Let me scan the scene. The image shows a double-decker bus, some buildings, a street. Do I see any plants in pots? Hmm, maybe not. Let's check again. The left side has a palm tree, but is that a potted plant? No, it's a tree outside. So there are no potted plants in the image. So the answer is no.\n</think>\n\nno<|im_end|>",
+      "thinking_words": 0,
+      "extracted": "No",
+      "correct": false
+    },
+    {
+      "index": 55,
+      "question": "Is there a chair in the image?",
+      "answer": "No",
+      "category": "popular",
+      "raw": "So, let's look at the image. The main subject is a red double-decker bus with people on the top. There's no chair visible in the scene. The bus is on a street, and the surroundings are buildings, trees, etc. No chairs are present. So the answer is no.\n</think>\n\nno<|im_end|>",
+      "thinking_words": 0,
+      "extracted": "No",
+      "correct": true
+    },
+    {
+      "index": 56,
+      "question": "Is there a car in the image?",
+      "answer": "Yes",
+      "category": "popular",
+      "raw": "So, let's check the image. The main subject is a red double-decker bus. Are there any cars? Looking around, in the background, there might be some vehicles, but the question is if there's a car. Wait, the image shows a bus, and maybe other cars in the distance. But the question is asking if there's a car. Let me see. The bus is the main thing, but are there cars? Let's check. The image has a bus, and maybe some other vehicles. Wait, the problem is to answer yes or no. So, is there a car? Let's l",
+      "thinking_words": 0,
+      "extracted": "Unknown",
+      "correct": false
+    },
+    {
+      "index": 57,
+      "question": "Is there a cup in the image?",
+      "answer": "No",
+      "category": "popular",
+      "raw": "So, let's check the image. The question is whether there's a cup. Looking at the double-decker bus, the people on the top are waving, but there's no cup visible. The bus has a sign \"Ruta del Arroz,\" and the surroundings are a street with buildings, trees, etc. No cups are present. So the answer is no.\n</think>\n\nno<|im_end|>",
+      "thinking_words": 0,
+      "extracted": "No",
+      "correct": true
+    },
+    {
+      "index": 58,
+      "question": "Is there a traffic light in the image?",
+      "answer": "Yes",
+      "category": "popular",
+      "raw": "So, let's check the image. In the background, there's a traffic light visible. The traffic light is hanging or maybe mounted on the side, but yes, there's a traffic light in the image. So the answer is yes.\n</think>\n\nyes<|im_end|>",
+      "thinking_words": 0,
+      "extracted": "Yes",
+      "correct": true
+    },
+    {
+      "index": 59,
+      "question": "Is there a dining table in the image?",
+      "answer": "No",
+      "category": "popular",
+      "raw": "So, let's look at the image. The picture is taken from inside a car, showing the dashboard and windshield. There are items like flowers, a clock, and some decorations. But is there a dining table? Dining tables are usually for eating, and this image is inside a car, so there's no dining table here. The answer should be no.\n</think>\n\nno<|im_end|>",
+      "thinking_words": 0,
+      "extracted": "No",
+      "correct": true
+    },
+    {
+      "index": 60,
+      "question": "Is there a person in the image?",
+      "answer": "Yes",
+      "category": "popular",
+      "raw": "So, let's look at the image. There are people visible through the car window. For example, there's a person in a white shirt, another in an orange headscarf, and maybe others. So yes, there are people.\n</think>\n\nyes<|im_end|>",
+      "thinking_words": 0,
+      "extracted": "Yes",
+      "correct": true
+    },
+    {
+      "index": 61,
+      "question": "Is there a chair in the image?",
+      "answer": "No",
+      "category": "popular",
+      "raw": "So, let's look at the image. The question is whether there's a chair. First, check the visible elements. The image shows a car's interior, with decorations like flowers, a clock, and some people outside. There's no chair visible in the car or anywhere else. So the answer is no.\n</think>\n\nno<|im_end|>",
+      "thinking_words": 0,
+      "extracted": "No",
+      "correct": true
+    },
+    {
+      "index": 62,
+      "question": "Is there a car in the image?",
+      "answer": "Yes",
+      "category": "popular",
+      "raw": "So, let's look at the image. The picture shows the interior of a car, right? There's a dashboard with items like flowers, a clock, and the windshield. Also, outside the car, there are other vehicles. So yes, there is a car in the image.\n</think>\n\nyes<|im_end|>",
+      "thinking_words": 0,
+      "extracted": "Yes",
+      "correct": true
+    },
+    {
+      "index": 63,
+      "question": "Is there a cup in the image?",
+      "answer": "No",
+      "category": "popular",
+      "raw": "So, let's look at the image. The question is whether there's a cup. First, check the dashboard area. There are flowers, a clock, some decorations. Wait, is there a cup? Let me scan again. The items visible: flowers, a clock, maybe a small container? Wait, no, the image shows a car's interior with decorations like flowers, a clock, and maybe a small object. But no cup is visible. So the answer is no.\n</think>\n\nno<|im_end|>",
+      "thinking_words": 0,
+      "extracted": "No",
+      "correct": true
+    },
+    {
+      "index": 64,
+      "question": "Is there a dog in the image?",
+      "answer": "Yes",
+      "category": "popular",
+      "raw": "So, let's look at the image. There's a white fluffy dog lying on a table next to a newspaper and a cup. So the answer should be yes.\n</think>\n\nyes<|im_end|>",
+      "thinking_words": 0,
+      "extracted": "Yes",
+      "correct": true
+    },
+    {
+      "index": 65,
+      "question": "Is there a person in the image?",
+      "answer": "No",
+      "category": "popular",
+      "raw": "So, let's look at the image. The picture shows a white dog, a newspaper, a cup, and some background. There's no person visible in the image. So the answer is no.\n</think>\n\nno<|im_end|>",
+      "thinking_words": 0,
+      "extracted": "No",
+      "correct": true
+    },
+    {
+      "index": 66,
+      "question": "Is there a dining table in the image?",
+      "answer": "Yes",
+      "category": "popular",
+      "raw": "So, let's look at the image. The dog is on a surface that looks like a countertop or table. The surface has a pattern, and there's a newspaper and a cup. Dining tables are usually for eating, but this might be a kitchen counter. Wait, the question is if there's a dining table. But maybe the surface is a dining table. Let me check. The image shows a surface with a newspaper, a cup, and the dog. Dining tables are typically in dining areas, but maybe this is a table. Wait, the answer should be yes ",
+      "thinking_words": 0,
+      "extracted": "Yes",
+      "correct": true
+    },
+    {
+      "index": 67,
+      "question": "Is there a snowboard in the image?",
+      "answer": "Yes",
+      "category": "adversarial",
+      "raw": "So, let's look at the image. There's a person skiing or snowboarding down a snowy slope. Wait, the person is wearing a red jacket and dark pants, and they're on a snow-covered hill. The question is if there's a snowboard. Let me check. Snowboarding is a different activity than skiing, but in the image, the person is moving down the slope, and the equipment they're using\u2014since it's a snowboard, but wait, maybe it's a snowboard. Wait, no, the person is on a snowboard? Wait, the image shows a perso",
+      "thinking_words": 0,
+      "extracted": "Unknown",
+      "correct": false
+    },
+    {
+      "index": 68,
+      "question": "Is there a backpack in the image?",
+      "answer": "No",
+      "category": "adversarial",
+      "raw": "So, let's look at the image. The person skiing is wearing a red jacket, but do they have a backpack? The image shows a skier in the middle of the snowy slope. I don't see any backpack visible. So the answer should be no.\n</think>\n\nno<|im_end|>",
+      "thinking_words": 0,
+      "extracted": "No",
+      "correct": true
+    },
+    {
+      "index": 69,
+      "question": "Is there a person in the image?",
+      "answer": "Yes",
+      "category": "adversarial",
+      "raw": "So, let's look at the image. There's a person skiing down the snowy slope. The person is wearing a red jacket and dark pants, and they're on a snowboard or skis. So yes, there is a person in the image.\n</think>\n\nyes<|im_end|>",
+      "thinking_words": 0,
+      "extracted": "Yes",
+      "correct": true
+    },
+    {
+      "index": 70,
+      "question": "Is there a car in the image?",
+      "answer": "No",
+      "category": "adversarial",
+      "raw": "So, let's look at the image. The picture shows a snowy slope with a person skiing. There's no car visible in the scene. The focus is on the skier and the snow. So the answer should be no.\n</think>\n\nno<|im_end|>",
+      "thinking_words": 0,
+      "extracted": "No",
+      "correct": true
+    },
+    {
+      "index": 71,
+      "question": "Is there a skis in the image?",
+      "answer": "Yes",
+      "category": "adversarial",
+      "raw": "So, let's look at the image. There's a person skiing down a snowy slope. The person is wearing a red jacket and dark pants, and they're on skis. So, yes, there are skis in the image.\n</think>\n\nyes<|im_end|>",
+      "thinking_words": 0,
+      "extracted": "Yes",
+      "correct": true
+    },
+    {
+      "index": 72,
+      "question": "Is there a dog in the image?",
+      "answer": "No",
+      "category": "adversarial",
+      "raw": "So, let's look at the image. The picture shows a snowy slope with a person skiing or snowboarding. There's no dog visible in the scene. So the answer should be no.\n</think>\n\nno<|im_end|>",
+      "thinking_words": 0,
+      "extracted": "No",
+      "correct": true
+    },
+    {
+      "index": 73,
+      "question": "Is there a truck in the image?",
+      "answer": "Yes",
+      "category": "adversarial",
+      "raw": "So, let's look at the image. In the background, there's a black truck parked on the grassy area. So yes, there is a truck.\n</think>\n\nyes<|im_end|>",
+      "thinking_words": 0,
+      "extracted": "Yes",
+      "correct": true
+    },
+    {
+      "index": 74,
+      "question": "Is there a car in the image?",
+      "answer": "No",
+      "category": "adversarial",
+      "raw": "So, let's look at the image. In the background, there's a black truck parked on the grassy area. So yes, there is a car.\n</think>\n\nyes<|im_end|>",
+      "thinking_words": 0,
+      "extracted": "Yes",
+      "correct": false
+    },
+    {
+      "index": 75,
+      "question": "Is there a person in the image?",
+      "answer": "Yes",
+      "category": "adversarial",
+      "raw": "So, let's look at the image. There are two people: an adult and a child. The adult is holding a red and black umbrella, and the child is standing next to them. So yes, there are people in the image.\n</think>\n\nyes<|im_end|>",
+      "thinking_words": 0,
+      "extracted": "Yes",
+      "correct": true
+    },
+    {
+      "index": 76,
+      "question": "Is there a dining table in the image?",
+      "answer": "No",
+      "category": "adversarial",
+      "raw": "So, let's look at the image. The scene is outdoors, a rainy day, with two people under a red and black umbrella. There's a wet driveway, grass, a car, and some buildings in the background. No dining table is visible here. So the answer is no.\n</think>\n\nno<|im_end|>",
+      "thinking_words": 0,
+      "extracted": "No",
+      "correct": true
+    },
+    {
+      "index": 77,
+      "question": "Is there an umbrella in the imange?",
+      "answer": "Yes",
+      "category": "adversarial",
+      "raw": "So, let's look at the image. There's a person holding a red and black umbrella. So yes, there is an umbrella.\n</think>\n\nyes<|im_end|>",
+      "thinking_words": 0,
+      "extracted": "Yes",
+      "correct": true
+    },
+    {
+      "index": 78,
+      "question": "Is there a handbag in the image?",
+      "answer": "No",
+      "category": "adversarial",
+      "raw": "So, let's look at the image. The picture shows a person holding a red and black umbrella, standing with a child. There's no handbag visible in the scene. The background has a car, grass, and a building, but no handbag. So the answer is no.\n</think>\n\nno<|im_end|>",
+      "thinking_words": 0,
+      "extracted": "No",
+      "correct": true
+    },
+    {
+      "index": 79,
+      "question": "Is there a person in the image?",
+      "answer": "Yes",
+      "category": "adversarial",
+      "raw": "So, let's check the image. There are people visible. For example, near the bus stop, there are people. Also, the van has a person inside. So yes, there are people.\n</think>\n\nyes<|im_end|>",
+      "thinking_words": 0,
+      "extracted": "Yes",
+      "correct": true
+    },
+    {
+      "index": 80,
+      "question": "Is there a dining table in the image?",
+      "answer": "No",
+      "category": "adversarial",
+      "raw": "So, let's look at the image. The scene is a bus station with buses, a van, palm trees, buildings, etc. There's no dining table visible. So the answer is no.\n</think>\n\nno<|im_end|>",
+      "thinking_words": 0,
+      "extracted": "No",
+      "correct": true
+    },
+    {
+      "index": 81,
+      "question": "Is there a bicycle in the image?",
+      "answer": "Yes",
+      "category": "adversarial",
+      "raw": "So, let's look at the image. In the lower right area, there's a person riding a bicycle. So yes, there is a bicycle.\n</think>\n\nyes<|im_end|>",
+      "thinking_words": 0,
+      "extracted": "Yes",
+      "correct": true
+    },
+    {
+      "index": 82,
+      "question": "Is there a motorcycle in the image?",
+      "answer": "No",
+      "category": "adversarial",
+      "raw": "So, let's look at the image. The question is whether there's a motorcycle. Let's check all elements. There's a bus, a van, trams, a bicycle (a person is riding a bike), but no motorcycle. So the answer is no.\n</think>\n\nno<|im_end|>",
+      "thinking_words": 0,
+      "extracted": "No",
+      "correct": true
+    },
+    {
+      "index": 83,
+      "question": "Is there a car in the image?",
+      "answer": "Yes",
+      "category": "adversarial",
+      "raw": "So, let's check the image. The question is whether there's a car. Looking at the image, there are buses, a van, but no cars. Wait, the image shows a bus stop with buses, a van, and some people. Are there any cars? Let me scan again. The vehicles present are the green and red buses, the white van, and maybe some other small vehicles? Wait, no, the image doesn't show any cars. So the answer is no.\n</think>\n\nno<|im_end|>",
+      "thinking_words": 0,
+      "extracted": "No",
+      "correct": false
+    },
+    {
+      "index": 84,
+      "question": "Is there a truck in the image?",
+      "answer": "No",
+      "category": "adversarial",
+      "raw": "So, let's look at the image. The question is whether there's a truck. First, check all vehicles. There's a white van labeled \"UNI EXPRESS\" which is a type of truck? Wait, vans can be considered trucks in some contexts, but let's see. The van is a small bus or van, but maybe the question is about a truck. Wait, the image has a white van, which is a type of truck? Wait, no, a van is a type of vehicle, but maybe the question is if there's a truck. Let's check. The van is a bus, but maybe the questi",
+      "thinking_words": 0,
+      "extracted": "Unknown",
+      "correct": false
+    },
+    {
+      "index": 85,
+      "question": "Is there a person in the image?",
+      "answer": "Yes",
+      "category": "adversarial",
+      "raw": "So, let's check the image. There's a red double-decker bus with people on the top deck. Some people are waving, others are standing. So there are people in the image. The answer should be yes.\n</think>\n\nyes<|im_end|>",
+      "thinking_words": 0,
+      "extracted": "Yes",
+      "correct": true
+    },
+    {
+      "index": 86,
+      "question": "Is there a dining table in the image?",
+      "answer": "No",
+      "category": "adversarial",
+      "raw": "So, let's look at the image. The picture shows a red double-decker bus with people on the top. There's a street, some buildings, trees, but no dining table. So the answer is no.\n</think>\n\nno<|im_end|>",
+      "thinking_words": 0,
+      "extracted": "No",
+      "correct": true
+    },
+    {
+      "index": 87,
+      "question": "Is there a potted plant in the image?",
+      "answer": "Yes",
+      "category": "adversarial",
+      "raw": "So, let's check the image. Looking around, there's a tree on the left side near the building, but are there potted plants? Wait, the question is about potted plants. Let me scan the scene. The image shows a double-decker bus, some buildings, a street. Do I see any plants in pots? Hmm, maybe not. Let's check again. The left side has a palm tree, but is that a potted plant? No, it's a tree outside. So there are no potted plants in the image. So the answer is no.\n</think>\n\nno<|im_end|>",
+      "thinking_words": 0,
+      "extracted": "No",
+      "correct": false
+    },
+    {
+      "index": 88,
+      "question": "Is there a vase in the image?",
+      "answer": "No",
+      "category": "adversarial",
+      "raw": "So, let's check the image. The question is whether there's a vase. Looking at the scene: a red double-decker bus with \"Ruta del Arroz\" on it, people on the top, buildings, trees, street. No vases are visible. So the answer is no.\n</think>\n\nno<|im_end|>",
+      "thinking_words": 0,
+      "extracted": "No",
+      "correct": true
+    },
+    {
+      "index": 89,
+      "question": "Is there a car in the image?",
+      "answer": "Yes",
+      "category": "adversarial",
+      "raw": "So, let's check the image. The main subject is a red double-decker bus. Are there any cars? Looking around, in the background, there might be some vehicles, but the question is if there's a car. Wait, the image shows a bus, and maybe other cars in the distance. But the question is asking if there's a car. Let me see. The bus is the main thing, but are there cars? Let's check. The image has a bus, and maybe some other vehicles. Wait, the problem is to answer yes or no. So, is there a car? Let's l",
+      "thinking_words": 0,
+      "extracted": "Unknown",
+      "correct": false
+    },
+    {
+      "index": 90,
+      "question": "Is there a truck in the image?",
+      "answer": "No",
+      "category": "adversarial",
+      "raw": "So, let's look at the image. The main vehicle is a red double-decker bus. Are there any trucks? Let's check. The bus is the only vehicle visible. There's no truck in the image. So the answer is no.\n</think>\n\nno<|im_end|>",
+      "thinking_words": 0,
+      "extracted": "No",
+      "correct": true
+    },
+    {
+      "index": 91,
+      "question": "Is there a traffic light in the image?",
+      "answer": "Yes",
+      "category": "adversarial",
+      "raw": "So, let's check the image. In the background, there's a traffic light visible. The traffic light is hanging or maybe mounted on the side, but yes, there's a traffic light in the image. So the answer is yes.\n</think>\n\nyes<|im_end|>",
+      "thinking_words": 0,
+      "extracted": "Yes",
+      "correct": true
+    },
+    {
+      "index": 92,
+      "question": "Is there a bus in the image?",
+      "answer": "No",
+      "category": "adversarial",
+      "raw": "So, let's look at the image. In the background, there's a white vehicle that looks like a bus. Wait, the question is if there's a bus. Let me check. The image shows a car's interior, and behind the windshield, there's a white bus. So yes, there is a bus.\n</think>\n\nyes<|im_end|>",
+      "thinking_words": 0,
+      "extracted": "Yes",
+      "correct": false
+    },
+    {
+      "index": 93,
+      "question": "Is there a person in the image?",
+      "answer": "Yes",
+      "category": "adversarial",
+      "raw": "So, let's look at the image. There are people visible through the car window. For example, there's a person in a white shirt, another in an orange headscarf, and maybe others. So yes, there are people.\n</think>\n\nyes<|im_end|>",
+      "thinking_words": 0,
+      "extracted": "Yes",
+      "correct": true
+    },
+    {
+      "index": 94,
+      "question": "Is there a dining table in the image?",
+      "answer": "No",
+      "category": "adversarial",
+      "raw": "So, let's look at the image. The picture is taken from inside a car, showing the dashboard and windshield. There are items like flowers, a clock, and some decorations. But is there a dining table? Dining tables are usually for eating, and this image is inside a car, so there's no dining table here. The answer should be no.\n</think>\n\nno<|im_end|>",
+      "thinking_words": 0,
+      "extracted": "No",
+      "correct": true
+    },
+    {
+      "index": 95,
+      "question": "Is there a car in the image?",
+      "answer": "Yes",
+      "category": "adversarial",
+      "raw": "So, let's look at the image. The picture shows the interior of a car, right? There's a dashboard with items like flowers, a clock, and the windshield. Also, outside the car, there are other vehicles. So yes, there is a car in the image.\n</think>\n\nyes<|im_end|>",
+      "thinking_words": 0,
+      "extracted": "Yes",
+      "correct": true
+    },
+    {
+      "index": 96,
+      "question": "Is there a truck in the image?",
+      "answer": "No",
+      "category": "adversarial",
+      "raw": "So, let's look at the image. The background shows a busy street with vehicles. There's a white van or maybe a truck? Wait, the question is if there's a truck. Let me check. The image has cars, but is there a truck? Hmm, the vehicles in the background\u2014maybe a truck. Wait, the white vehicle in the background, but maybe it's a van. Wait, no, the question is about a truck. Let me see. The image shows a car's interior, and outside, there are other vehicles. Wait, maybe there's a truck. Wait, the whit",
+      "thinking_words": 0,
+      "extracted": "Unknown",
+      "correct": false
+    },
+    {
+      "index": 97,
+      "question": "Is there a dog in the image?",
+      "answer": "Yes",
+      "category": "adversarial",
+      "raw": "So, let's look at the image. There's a white fluffy dog lying on a table next to a newspaper and a cup. So the answer should be yes.\n</think>\n\nyes<|im_end|>",
+      "thinking_words": 0,
+      "extracted": "Yes",
+      "correct": true
+    },
+    {
+      "index": 98,
+      "question": "Is there a person in the image?",
+      "answer": "No",
+      "category": "adversarial",
+      "raw": "So, let's look at the image. The picture shows a white dog, a newspaper, a cup, and some background. There's no person visible in the image. So the answer is no.\n</think>\n\nno<|im_end|>",
+      "thinking_words": 0,
+      "extracted": "No",
+      "correct": true
+    },
+    {
+      "index": 99,
+      "question": "Is there a dining table in the image?",
+      "answer": "Yes",
+      "category": "adversarial",
+      "raw": "So, let's look at the image. The dog is on a surface that looks like a countertop or table. The surface has a pattern, and there's a newspaper and a cup. Dining tables are usually for eating, but this might be a kitchen counter. Wait, the question is if there's a dining table. But maybe the surface is a dining table. Let me check. The image shows a surface with a newspaper, a cup, and the dog. Dining tables are typically in dining areas, but maybe this is a table. Wait, the answer should be yes ",
+      "thinking_words": 0,
+      "extracted": "Yes",
+      "correct": true
+    }
+  ]
+}
