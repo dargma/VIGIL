@@ -60,9 +60,16 @@ The heatmap reveals a highly asymmetric head structure:
 
 ![Image Attention Overlay](fig3_image_attention_overlay.png)
 
-**Figure 3: Conceptual attention overlay with real activation scaling.**
+**Figure 3: Vision head activation overlay on real POPE image.**
 
-The overlay uses real activation decay ratios to scale the attention intensities. For ~37-token POPE responses, the attention remains relatively focused throughout (the decline is modest compared to longer chains).
+Real POPE image for "Is there a dining table in the image?" (answer: No). Overlay intensity is scaled by measured mean activation Δ across 12 vision heads at three generation timepoints.
+
+**Real activation scales (normalized to global max):**
+- **Early (token ~4)**: BL=0.23, Exp10=0.22 — similar low initial activation
+- **Mid (token ~19)**: BL=0.78, Exp10=0.78 — both peak during reasoning
+- **Late (token ~34)**: BL=0.65, Exp10=**0.99** — Exp10 maintains higher activation near answer
+
+The late-token difference (0.65 vs 0.99) shows Exp10 sustains vision head engagement through the answer phase. Note: spatial distribution is conceptual (o_proj activations are per-head scalars, not spatial maps), but intensity scaling reflects real measurements.
 
 ---
 

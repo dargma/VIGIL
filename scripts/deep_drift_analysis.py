@@ -473,167 +473,152 @@ def fig2_head_cam_heatmap(real_data=None):
 
 def fig3_image_heatmap_overlay(real_data=None):
     """
-    Show what the model "looks at" with attention overlays.
-    Uses real POPE image when real_data is available, synthetic otherwise.
+    Show vision head activation strength overlaid on the real POPE image.
 
-    Note: Spatial attention maps are conceptual illustrations — o_proj head
-    activations are per-head scalars, not spatial. The overlay intensity is
-    scaled by actual per-token activation strength when real data available.
+    Uses real per-token activation delta from drift data to scale overlay
+    intensity at three generation timepoints. Loads actual POPE image from
+    HuggingFace dataset matching the drift sample question.
+
+    Note: o_proj activations are per-head scalars (not spatial). The spatial
+    overlay is a conceptual illustration with intensity scaled by real data.
     """
     print("[fig3] Image + Head Activation Overlay...")
 
-    # Try to load a real POPE image
+    # Load real data
     real_image = None
     real_question = None
-    attn_scales = None  # [early, mid, late] relative attention strength
+    bl_curve = vg_curve = None
+    n_tokens = 0
+
     if real_data and real_data.get("baseline"):
         sample = real_data["baseline"][0]
         real_question = sample.get("question", "")
-        # Get attention decay curve from real data for scaling
-        bl_mean, _, _, _ = aggregate_real_curves(real_data, "baseline")
-        vg_mean, _, _, _ = aggregate_real_curves(real_data, "exp10")
-        if bl_mean is not None and vg_mean is not None:
-            n = min(len(bl_mean), len(vg_mean))
-            # Sample at 5%, 50%, 90% of generation
-            pts = [max(0, int(n*f)) for f in [0.05, 0.50, 0.90]]
-            pts = [min(p, n-1) for p in pts]
-            bl_max = max(bl_mean[pts[0]], 1e-6)
-            attn_scales = {
-                "baseline": [float(bl_mean[p] / bl_max) for p in pts],
-                "vigil": [float(vg_mean[p] / bl_max) for p in pts],
-            }
-            print(f"  Attention scales from real data: baseline={attn_scales['baseline']}, "
-                  f"vigil={attn_scales['vigil']}")
+        n_tokens = sample.get("n_tokens", 0)
 
-        # Try to load the actual image
+        # Get mean activation curves
+        bl_curve, _, _, _ = aggregate_real_curves(real_data, "baseline")
+        vg_curve, _, _, _ = aggregate_real_curves(real_data, "exp10")
+
+        # Load real POPE image matching this question
         try:
-            from datasets import load_from_disk
-            ds = load_from_disk("data/eval/pope")
-            for split in ["random", "popular", "adversarial"]:
-                if split in ds:
-                    for item in ds[split]:
-                        if item["question"] == real_question:
-                            real_image = item["image"]
-                            break
-                if real_image:
+            from datasets import load_dataset
+            ds = load_dataset("lmms-lab/POPE", split="test")
+            for row in ds:
+                if row["question"] == real_question:
+                    real_image = row["image"]
                     break
+            if real_image:
+                print(f"  Loaded real POPE image: {real_image.size}")
         except Exception as e:
-            print(f"  Could not load real POPE image: {e}")
+            print(f"  Could not load POPE image: {e}")
 
     img_size = 448
+
+    # Use real or synthetic image
     if real_image is not None and isinstance(real_image, Image.Image):
         img = real_image.resize((img_size, img_size))
-        print(f"  Using REAL POPE image for: {real_question[:60]}")
+        print(f"  Real image for: \"{real_question}\"")
     else:
+        # Fallback: synthetic scene
         img = Image.new('RGB', (img_size, img_size), (180, 200, 180))
-    if real_image is None or not isinstance(real_image, Image.Image):
         draw = ImageDraw.Draw(img)
-        # Draw synthetic scene: sky, ground, objects
         draw.rectangle([0, 0, img_size, img_size//3], fill=(135, 206, 235))
         draw.rectangle([0, img_size//3, img_size, img_size], fill=(34, 139, 34))
-        cat_x, cat_y = 200, 220
-        draw.ellipse([cat_x-40, cat_y-30, cat_x+40, cat_y+30], fill=(80, 60, 40))
-        draw.ellipse([cat_x-15, cat_y-50, cat_x+15, cat_y-20], fill=(80, 60, 40))
-        draw.ellipse([cat_x-18, cat_y-60, cat_x-8, cat_y-45], fill=(80, 60, 40))
-        draw.ellipse([cat_x+8, cat_y-60, cat_x+18, cat_y-45], fill=(80, 60, 40))
-        draw.ellipse([cat_x-8, cat_y-42, cat_x-3, cat_y-36], fill=(255, 255, 0))
-        draw.ellipse([cat_x+3, cat_y-42, cat_x+8, cat_y-36], fill=(255, 255, 0))
-        draw.rectangle([80, 100, 100, 250], fill=(101, 67, 33))
-        draw.ellipse([50, 60, 130, 130], fill=(0, 100, 0))
+        draw.ellipse([160, 190, 240, 250], fill=(80, 60, 40))
+        draw.ellipse([185, 165, 215, 195], fill=(80, 60, 40))
         draw.rectangle([320, 150, 420, 250], fill=(200, 150, 100))
         draw.polygon([(310, 150), (370, 100), (430, 150)], fill=(180, 50, 50))
-    else:
-        # Center of real image as default attention center
-        cat_x, cat_y = img_size // 2, img_size // 2
 
     img_arr = np.array(img).astype(float) / 255.0
 
-    # Create attention heatmaps (conceptual illustration)
-    def make_attention_map(img_size, center, sigma, intensity):
-        y, x = np.mgrid[0:img_size, 0:img_size]
-        gaussian = np.exp(-((x - center[0])**2 + (y - center[1])**2) / (2 * sigma**2))
-        return gaussian * intensity
-
-    # Scale intensities by real activation data if available
-    if attn_scales:
-        bl_s = attn_scales["baseline"]  # [early, mid, late]
-        vg_s = attn_scales["vigil"]
+    # Compute activation scales at 3 timepoints from real data
+    if bl_curve is not None and vg_curve is not None:
+        n = min(len(bl_curve), len(vg_curve))
+        # Sample at early (10%), mid (50%), late (90%) of generation
+        pts = [max(0, min(int(n * f), n - 1)) for f in [0.10, 0.50, 0.90]]
+        # Normalize to [0, 1] using global max across both curves
+        global_max = max(max(bl_curve), max(vg_curve), 1e-6)
+        bl_s = [float(bl_curve[p] / global_max) for p in pts]
+        vg_s = [float(vg_curve[p] / global_max) for p in pts]
+        token_labels = [f"Token {pts[i]+1}/{n}" for i in range(3)]
+        source_label = "Real activation data"
+        print(f"  BL scales: {[f'{v:.2f}' for v in bl_s]}")
+        print(f"  VG scales: {[f'{v:.2f}' for v in vg_s]}")
     else:
-        bl_s = [1.0, 0.4, 0.15]  # simulated decay
-        vg_s = [1.0, 0.85, 0.72]  # simulated sustained
+        bl_s = [0.5, 0.3, 0.1]
+        vg_s = [0.5, 0.45, 0.4]
+        token_labels = ["Token 5", "Token 20", "Token 35"]
+        source_label = "Simulated"
 
-    # Baseline: attention on center, decaying with generation
-    baseline_early = make_attention_map(img_size, (cat_x, cat_y), 80, 0.9 * bl_s[0])
-    baseline_early += make_attention_map(img_size, (90, 120), 60, 0.3 * bl_s[0])
-    baseline_early += make_attention_map(img_size, (370, 200), 50, 0.2 * bl_s[0])
+    # Create attention heatmaps — center-focused Gaussian scaled by real delta
+    cx, cy = img_size // 2, img_size // 2
+    y_grid, x_grid = np.mgrid[0:img_size, 0:img_size]
 
-    baseline_mid = make_attention_map(img_size, (cat_x, cat_y), 120, 0.9 * bl_s[1])
-    baseline_mid += make_attention_map(img_size, (img_size//2, img_size//2), 200, 0.2 * bl_s[1])
+    def make_heatmap(intensity, sigma_base=80):
+        """Single centered Gaussian + slight uniform background."""
+        sigma = sigma_base + (1.0 - intensity) * 100  # weaker → more diffuse
+        focused = np.exp(-((x_grid - cx)**2 + (y_grid - cy)**2) / (2 * sigma**2))
+        uniform = 0.05
+        return focused * intensity + uniform
 
-    baseline_late = np.ones((img_size, img_size)) * 0.1 * bl_s[2]
-    baseline_late += make_attention_map(img_size, (img_size//2, img_size//2), 300, 0.15 * bl_s[2])
-
-    # VIGIL: sustained focus throughout
-    vigil_early = make_attention_map(img_size, (cat_x, cat_y), 70, 0.9 * vg_s[0])
-    vigil_early += make_attention_map(img_size, (90, 120), 50, 0.35 * vg_s[0])
-    vigil_early += make_attention_map(img_size, (370, 200), 45, 0.25 * vg_s[0])
-
-    vigil_mid = make_attention_map(img_size, (cat_x, cat_y), 80, 0.9 * vg_s[1])
-    vigil_mid += make_attention_map(img_size, (90, 120), 55, 0.2)
-
-    vigil_late = make_attention_map(img_size, (cat_x, cat_y), 85, 0.9 * vg_s[2])
-    vigil_late += make_attention_map(img_size, (370, 200), 60, 0.15 * vg_s[2])
-
-    def overlay_heatmap(img_arr, heatmap, cmap_name='jet', alpha=0.5):
-        cmap = plt.colormaps.get_cmap(cmap_name)
+    def overlay_heatmap(img_arr, heatmap, alpha=0.45):
+        cmap = plt.colormaps.get_cmap('jet')
         hm_norm = np.clip(heatmap / (heatmap.max() + 1e-6), 0, 1)
         hm_colored = cmap(hm_norm)[:, :, :3]
         return (1 - alpha) * img_arr + alpha * hm_colored
 
-    # Create figure: 2 rows (baseline, VIGIL) × 3 cols (early, mid, late)
+    # Build heatmaps for both conditions at 3 timepoints
+    bl_maps = [make_heatmap(s) for s in bl_s]
+    vg_maps = [make_heatmap(s) for s in vg_s]
+
+    # Plot: 2 rows (baseline, VIGIL) × 3 cols (early, mid, late)
     fig, axes = plt.subplots(2, 3, figsize=(18, 12))
 
-    titles_top = ['Token 5 (early thinking)', 'Token 50 (mid thinking)', 'Token 90 (near answer)']
-
-    for j, (hm, title) in enumerate(zip(
-        [baseline_early, baseline_mid, baseline_late], titles_top)):
-        overlaid = overlay_heatmap(img_arr, hm, 'jet', 0.45)
-        axes[0, j].imshow(overlaid)
-        axes[0, j].set_title(title, fontsize=12)
+    for j in range(3):
+        overlaid_bl = overlay_heatmap(img_arr, bl_maps[j])
+        axes[0, j].imshow(overlaid_bl)
+        axes[0, j].set_title(f'{token_labels[j]}\nΔ intensity: {bl_s[j]:.2f}',
+                            fontsize=12)
         axes[0, j].axis('off')
 
-    for j, (hm, title) in enumerate(zip(
-        [vigil_early, vigil_mid, vigil_late], titles_top)):
-        overlaid = overlay_heatmap(img_arr, hm, 'jet', 0.45)
-        axes[1, j].imshow(overlaid)
-        axes[1, j].set_title(title, fontsize=12)
+        overlaid_vg = overlay_heatmap(img_arr, vg_maps[j])
+        axes[1, j].imshow(overlaid_vg)
+        axes[1, j].set_title(f'{token_labels[j]}\nΔ intensity: {vg_s[j]:.2f}',
+                            fontsize=12)
         axes[1, j].axis('off')
 
     # Row labels
-    axes[0, 0].text(-0.15, 0.5, 'BASELINE\n(Standard GRPO)',
+    axes[0, 0].text(-0.12, 0.5, 'BASELINE\n(HF Thinking)',
                     transform=axes[0, 0].transAxes, fontsize=14,
                     fontweight='bold', color='#e03131', va='center', ha='right',
                     rotation=90)
-    axes[1, 0].text(-0.15, 0.5, 'VIGIL Exp10\n(Head-LSR GRPO)',
+    axes[1, 0].text(-0.12, 0.5, 'VIGIL Exp10\n(Head-LSR GRPO)',
                     transform=axes[1, 0].transAxes, fontsize=14,
                     fontweight='bold', color='#2b8a3e', va='center', ha='right',
                     rotation=90)
 
-    # Add verdict boxes
-    axes[0, 2].text(0.5, -0.08, 'Attention scattered → WRONG answer likely',
+    # Annotations
+    bl_answer = real_data["baseline"][0].get("pred_real", "?") if real_data else "?"
+    vg_answer = real_data["exp10"][0].get("pred_real", "?") if real_data else "?"
+    gt = real_data["baseline"][0].get("answer", "?") if real_data else "?"
+    axes[0, 2].text(0.5, -0.06,
+                   f'Predicted: {bl_answer} (GT: {gt})',
                    transform=axes[0, 2].transAxes, fontsize=11,
-                   color='#e03131', ha='center', fontweight='bold',
-                   bbox=dict(facecolor='#ffe3e3', alpha=0.9, boxstyle='round,pad=0.3'))
-    axes[1, 2].text(0.5, -0.08, 'Still looking at cat → CORRECT answer',
+                   ha='center', fontweight='bold',
+                   color='#2b8a3e' if bl_answer.lower() == gt.lower() else '#e03131',
+                   bbox=dict(facecolor='#f0f0f0', alpha=0.9, boxstyle='round,pad=0.3'))
+    axes[1, 2].text(0.5, -0.06,
+                   f'Predicted: {vg_answer} (GT: {gt})',
                    transform=axes[1, 2].transAxes, fontsize=11,
-                   color='#2b8a3e', ha='center', fontweight='bold',
-                   bbox=dict(facecolor='#d8f5a2', alpha=0.9, boxstyle='round,pad=0.3'))
+                   ha='center', fontweight='bold',
+                   color='#2b8a3e' if vg_answer.lower() == gt.lower() else '#e03131',
+                   bbox=dict(facecolor='#f0f0f0', alpha=0.9, boxstyle='round,pad=0.3'))
 
-    q_display = real_question[:60] if real_question else "Is there a cat in the image?"
-    src = "Real POPE image + measured attention decay" if attn_scales else "Synthetic illustration"
-    fig.suptitle(f'Vision Head Activation Overlay: Where the Model "Looks"\n'
-                f'Q: "{q_display}" — {src}',
-                fontsize=15, fontweight='bold', y=0.98)
+    q_display = real_question if real_question else "Is there an object in the image?"
+    fig.suptitle(
+        f'Vision Head Activation Overlay ({source_label})\n'
+        f'Q: "{q_display}" — {n_tokens} tokens generated',
+        fontsize=15, fontweight='bold', y=0.98)
 
     plt.tight_layout(rect=[0.05, 0, 1, 0.95])
     plt.savefig(OUT_DIR / "fig3_image_attention_overlay.png", dpi=200, bbox_inches='tight')
