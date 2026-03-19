@@ -1,0 +1,110 @@
+[
+  {
+    "model": "internvl3_5_1b",
+    "experiment": "exp1_baseline",
+    "description": "Fixed top-K heads GRPO (baseline)",
+    "pre_pope": {
+      "acc": 0.0,
+      "correct": 0,
+      "total": 20
+    },
+    "pre_blind": {
+      "real_acc": 0.0,
+      "blind_acc": 0.0,
+      "gap": 0.0,
+      "total": 10
+    },
+    "post_pope": {
+      "acc": 0.0,
+      "correct": 0,
+      "total": 20
+    },
+    "post_blind": {
+      "real_acc": 0.0,
+      "blind_acc": 0.0,
+      "gap": 0.0,
+      "total": 10
+    },
+    "loss": 0.0,
+    "rewards": [
+      0.0,
+      0.0,
+      0.0
+    ],
+    "step_time_s": 0.018858671188354492,
+    "timestamp": "2026-03-18T23:15:23.170338",
+    "status": "ok"
+  },
+  {
+    "model": "internvl3_5_1b",
+    "experiment": "exp8_adaptive_topk",
+    "description": "Adaptive per-rollout top-K head selection",
+    "pre_pope": {
+      "acc": 0.0,
+      "correct": 0,
+      "total": 20
+    },
+    "pre_blind": {
+      "real_acc": 0.0,
+      "blind_acc": 0.0,
+      "gap": 0.0,
+      "total": 10
+    },
+    "post_pope": {
+      "acc": 0.0,
+      "correct": 0,
+      "total": 20
+    },
+    "post_blind": {
+      "real_acc": 0.0,
+      "blind_acc": 0.0,
+      "gap": 0.0,
+      "total": 10
+    },
+    "loss": 0.0,
+    "rewards": [
+      0.0,
+      0.0,
+      0.0
+    ],
+    "step_time_s": 0.019728422164916992,
+    "timestamp": "2026-03-18T23:15:23.746670",
+    "status": "ok"
+  },
+  {
+    "model": "internvl3_5_1b",
+    "experiment": "exp10_sharp_sigmoid",
+    "description": "Soft-weighted ALL heads, sharp sigmoid (T/3)",
+    "pre_pope": {
+      "acc": 0.0,
+      "correct": 0,
+      "total": 20
+    },
+    "pre_blind": {
+      "real_acc": 0.0,
+      "blind_acc": 0.0,
+      "gap": 0.0,
+      "total": 10
+    },
+    "post_pope": {
+      "acc": 0.0,
+      "correct": 0,
+      "total": 20
+    },
+    "post_blind": {
+      "real_acc": 0.0,
+      "blind_acc": 0.0,
+      "gap": 0.0,
+      "total": 10
+    },
+    "loss": 0.0,
+    "rewards": [
+      0.0,
+      0.0,
+      0.0
+    ],
+    "step_time_s": 0.025723934173583984,
+    "timestamp": "2026-03-18T23:15:24.461695",
+    "status": "ok"
+  }
+]

@@ -1,0 +1,7 @@
+[
+  {
+    "model": "internvl3_5_1b",
+    "status": "load_failed",
+    "error": "'NoneType' object has no attribute 'keys'"
+  }
+]

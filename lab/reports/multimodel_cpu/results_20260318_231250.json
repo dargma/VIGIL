@@ -1,0 +1,7 @@
+[
+  {
+    "model": "internvl3_5_1b",
+    "status": "load_failed",
+    "error": "'InternVLChatModel' object has no attribute 'all_tied_weights_keys'"
+  }
+]

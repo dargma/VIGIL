@@ -1,0 +1,107 @@
+[
+  {
+    "model": "internvl3_5_1b",
+    "experiment": "exp1_baseline",
+    "description": "Fixed top-K heads GRPO (baseline)",
+    "pre_pope": {
+      "acc": 0.6666666666666666,
+      "correct": 2,
+      "total": 3
+    },
+    "pre_blind": {
+      "real_acc": 0.6666666666666666,
+      "blind_acc": 0.6666666666666666,
+      "gap": 0.0,
+      "total": 3
+    },
+    "post_pope": {
+      "acc": 0.6666666666666666,
+      "correct": 2,
+      "total": 3
+    },
+    "post_blind": {
+      "real_acc": 0.6666666666666666,
+      "blind_acc": 0.6666666666666666,
+      "gap": 0.0,
+      "total": 3
+    },
+    "loss": 0.0,
+    "rewards": [
+      0.0,
+      0.0
+    ],
+    "step_time_s": 14.377014875411987,
+    "timestamp": "2026-03-19T00:03:39.032833",
+    "status": "ok"
+  },
+  {
+    "model": "internvl3_5_1b",
+    "experiment": "exp8_adaptive_topk",
+    "description": "Adaptive per-rollout top-K head selection",
+    "pre_pope": {
+      "acc": 0.6666666666666666,
+      "correct": 2,
+      "total": 3
+    },
+    "pre_blind": {
+      "real_acc": 0.6666666666666666,
+      "blind_acc": 0.6666666666666666,
+      "gap": 0.0,
+      "total": 3
+    },
+    "post_pope": {
+      "acc": 0.6666666666666666,
+      "correct": 2,
+      "total": 3
+    },
+    "post_blind": {
+      "real_acc": 0.6666666666666666,
+      "blind_acc": 0.6666666666666666,
+      "gap": 0.0,
+      "total": 3
+    },
+    "loss": 0.0,
+    "rewards": [
+      0.0,
+      0.0
+    ],
+    "step_time_s": 15.521574258804321,
+    "timestamp": "2026-03-19T00:06:18.778896",
+    "status": "ok"
+  },
+  {
+    "model": "internvl3_5_1b",
+    "experiment": "exp10_sharp_sigmoid",
+    "description": "Soft-weighted ALL heads, sharp sigmoid (T/3)",
+    "pre_pope": {
+      "acc": 0.6666666666666666,
+      "correct": 2,
+      "total": 3
+    },
+    "pre_blind": {
+      "real_acc": 0.6666666666666666,
+      "blind_acc": 0.6666666666666666,
+      "gap": 0.0,
+      "total": 3
+    },
+    "post_pope": {
+      "acc": 0.6666666666666666,
+      "correct": 2,
+      "total": 3
+    },
+    "post_blind": {
+      "real_acc": 0.6666666666666666,
+      "blind_acc": 0.6666666666666666,
+      "gap": 0.0,
+      "total": 3
+    },
+    "loss": 0.0,
+    "rewards": [
+      0.0,
+      0.0
+    ],
+    "step_time_s": 16.126625537872314,
+    "timestamp": "2026-03-19T00:08:57.303301",
+    "status": "ok"
+  }
+]
