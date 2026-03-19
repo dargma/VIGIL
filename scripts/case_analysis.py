@@ -15,13 +15,13 @@ to generate real Exp10 predictions.
 Without GPU, uses statistical simulation based on actual aggregate metrics.
 """
 
-import json, os, sys, random, argparse
+import json, os, random, argparse
 import numpy as np
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
-from matplotlib.patches import Rectangle, FancyBboxPatch
+from matplotlib.patches import FancyBboxPatch
 from pathlib import Path
 from collections import Counter, defaultdict
 from datetime import datetime
@@ -81,35 +81,22 @@ def load_or_simulate_exp10(baseline_recs, exp10_path=None):
     rng = random.Random(42)
     n = len(baseline_recs)
 
-    # Target: 95% accuracy (from actual 60-sample eval, extrapolated)
-    # Baseline: 89.6% (weighted across splits)
-    # But 9K eval shows 87.4/89.3/92.0 per split
-    baseline_correct = [r for r in baseline_recs if r["correct"]]
-    baseline_wrong = [r for r in baseline_recs if not r["correct"]]
-    n_baseline_correct = len(baseline_correct)
-    n_baseline_wrong = len(baseline_wrong)
-
-    # Per-split target accuracy (from actual 60-sample results, scaled)
-    target_acc = {
-        "adversarial": 0.930,  # hardest → most room to improve
-        "popular": 0.955,
-        "random": 0.970,       # easiest → near ceiling
-    }
+    # Simulation parameters based on actual Exp10 aggregate metrics
+    # (95% POPE, 44pp gap from 60-sample eval)
+    FP_FIX_RATE = 0.65   # false positives: blind "yes" → fixed by head-LSR
+    FN_FIX_RATE = 0.45   # false negatives: missed object → helped by sustained attention
+    OTHER_FIX_RATE = 0.30
+    REGRESSION_RATE = 0.02  # small chance trained model breaks a correct answer
 
     exp10_recs = []
     for r in baseline_recs:
         er = dict(r)  # copy
-        cat = r["category"]
         gt = r["answer"]
         baseline_pred = r["extracted"]
         was_correct = r["correct"]
 
-        t_acc = target_acc.get(cat, 0.950)
-
         if was_correct:
-            # Baseline got it right — small chance of regression
-            # Regression rate: ~2% (some edge cases where head-LSR hurts)
-            if rng.random() < 0.02:
+            if rng.random() < REGRESSION_RATE:
                 # Flip prediction
                 er["extracted"] = "No" if baseline_pred == "Yes" else "Yes"
                 er["correct"] = False
@@ -122,17 +109,13 @@ def load_or_simulate_exp10(baseline_recs, exp10_path=None):
             # Fix rate depends on error type:
             baseline_error_type = None
             if gt.lower() == "no" and baseline_pred.lower() == "yes":
-                # False positive: model said "yes" when object absent
-                # This is the PRIMARY failure mode VIGIL fixes (blind "yes" bias)
-                fix_prob = 0.65  # 65% of false positives get fixed
+                fix_prob = FP_FIX_RATE
                 baseline_error_type = "false_positive"
             elif gt.lower() == "yes" and baseline_pred.lower() == "no":
-                # False negative: model said "no" when object present
-                # VIGIL also helps here (better attention → sees object)
-                fix_prob = 0.45  # 45% of false negatives get fixed
+                fix_prob = FN_FIX_RATE
                 baseline_error_type = "false_negative"
             else:
-                fix_prob = 0.3
+                fix_prob = OTHER_FIX_RATE
                 baseline_error_type = "other"
 
             if rng.random() < fix_prob:

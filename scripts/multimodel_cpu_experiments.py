@@ -105,9 +105,11 @@ TRAIN_SAMPLES = 2   # minimal training data
 # ══════════════════════════════════════════════════════════════════════
 
 def disk_check():
-    usage = os.popen("df -h . | awk 'NR==2 {print $5}' | tr -d '%'").read().strip()
-    if usage and int(usage) >= 95:
-        raise RuntimeError("DISK 95% — halted")
+    import shutil
+    total, used, free = shutil.disk_usage(".")
+    pct = used / total * 100
+    if pct >= 95:
+        raise RuntimeError(f"DISK {pct:.0f}% — halted")
 
 def split_thinking(text):
     m = re.search(r'<think>(.*?)</think>', text, re.DOTALL)
@@ -173,7 +175,8 @@ def get_model_layers(model, layer_path):
 
 def load_model_cpu(model_key):
     """Load model on CPU in bfloat16."""
-    mcfg = MODEL_CONFIGS[model_key]
+    mcfg = dict(MODEL_CONFIGS[model_key])  # copy to avoid mutating global
+    MODEL_CONFIGS[model_key] = mcfg
     hf_id = mcfg["hf_id"]
     api = mcfg["input_api"]
     dtype = torch.bfloat16
@@ -998,6 +1001,7 @@ def run_experiment(model, model_key, processor, tokenizer, exp_name, exp_cfg,
     # 1 training step
     sample = train_data[0]
     step_t0 = time.time()
+    rewards = []
 
     try:
         model.eval()
@@ -1064,7 +1068,7 @@ def run_experiment(model, model_key, processor, tokenizer, exp_name, exp_cfg,
         "post_pope": post_pope,
         "post_blind": post_blind,
         "loss": loss.item() if loss is not None else None,
-        "rewards": rewards if 'rewards' in dir() else [],
+        "rewards": rewards,
         "step_time_s": step_time,
         "timestamp": datetime.now().isoformat(),
     }

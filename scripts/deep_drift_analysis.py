@@ -12,16 +12,16 @@ Uses actual training history data from Exp10 scaled_final run.
 Figures saved to lab/reports/deep_drift_analysis/
 """
 
-import json, os, sys
+import json, os
 import numpy as np
+from scipy.ndimage import uniform_filter1d
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
-from matplotlib.patches import FancyArrowPatch, Rectangle
-from matplotlib.colors import LinearSegmentedColormap
+from matplotlib.patches import Rectangle
 from pathlib import Path
-from PIL import Image, ImageDraw, ImageFont, ImageFilter
+from PIL import Image, ImageDraw
 
 PROJECT_ROOT = Path(__file__).parent.parent
 os.chdir(PROJECT_ROOT)
@@ -83,35 +83,6 @@ VISION_HEADS = [
     (4, 1, 4.957), (10, 8, 4.932), (5, 10, 4.552),
 ]
 
-# Full Cohen's d heatmap (28 layers × 16 heads) — from calibration
-# Using actual data where available, rest estimated from patterns
-def build_cohen_d_map():
-    """Build full 28×16 Cohen's d map from calibration data."""
-    np.random.seed(42)
-    # Base: most heads have low Cohen's d (< 2.0)
-    cd_map = np.random.exponential(0.8, (28, 16)).clip(0, 3)
-
-    # Decision heads (L0-5): higher variance, some very high
-    cd_map[0:6, :] += np.random.exponential(1.2, (6, 16)).clip(0, 4)
-
-    # Feature heads (L23-27): moderate Cohen's d but high activation
-    cd_map[23:28, :] += np.random.exponential(1.0, (5, 16)).clip(0, 3)
-
-    # Set actual calibrated values
-    for l, h, d in VISION_HEADS:
-        cd_map[l, h] = d
-
-    # Add some known patterns from data
-    cd_map[5, 0] = 9.795   # strongest decision head
-    cd_map[4, 6] = 6.943
-    cd_map[23, 2] = 6.602  # strongest feature head
-    cd_map[2, 9] = 6.551
-    cd_map[26, 9] = 6.6    # feature head (from Exp10 top5)
-    cd_map[24, 6] = 5.5    # feature head
-    cd_map[27, 15] = 5.2   # feature head
-
-    return cd_map
-
 
 # ══════════════════════════════════════════════════════════════════════
 #  FIGURE 1: Enhanced Vision Attention Drift (the key figure)
@@ -162,7 +133,6 @@ def fig1_enhanced_drift():
     vigil = np.clip(vigil, 0.1, 0.80)
 
     # Smoothed versions for trend lines
-    from scipy.ndimage import uniform_filter1d
     baseline_smooth = uniform_filter1d(baseline, size=7)
     vigil_smooth = uniform_filter1d(vigil, size=7)
 
@@ -437,7 +407,7 @@ def fig3_image_heatmap_overlay():
     vigil_late += make_attention_map(img_size, (370, 200), 60, 0.15)
 
     def overlay_heatmap(img_arr, heatmap, cmap_name='jet', alpha=0.5):
-        cmap = plt.cm.get_cmap(cmap_name)
+        cmap = plt.colormaps.get_cmap(cmap_name)
         hm_norm = np.clip(heatmap / (heatmap.max() + 1e-6), 0, 1)
         hm_colored = cmap(hm_norm)[:, :, :3]
         return (1 - alpha) * img_arr + alpha * hm_colored
