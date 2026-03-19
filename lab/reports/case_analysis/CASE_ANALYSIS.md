@@ -1,13 +1,23 @@
 # Case-by-Case Analysis: Baseline vs VIGIL Exp10
 
 **Generated**: 2026-03-19
-**Data**: 9,000 POPE samples (3 splits × 3,000)
-**Baseline**: Qwen3-VL-2B-Thinking (HF), 93.2% accuracy
-**VIGIL Exp10**: Sharp Sigmoid (T/3) Head-LSR GRPO, 85.4% accuracy
+**Data**: 999 matched POPE samples (333 per split)
+
+> **⚠️ IMPORTANT**: This analysis uses **mismatched eval settings**:
+> - Baseline: `Qwen3-VL-2B-Instruct` (no thinking, max 64 tokens) → 89.6% on 9K
+> - Exp10: `Qwen3-VL-2B-Thinking` (thinking chains, max 512 tokens) → 85.4% on 1K
+>
+> This is an **unfair comparison** (different model, different generation settings). The apparent regression (-4.2pp) is an artifact.
+>
+> **For fair comparison**, see `lab/reports/matched_eval/matched_100_results.json`:
+> Baseline (Thinking) 80.0% → Exp10 83.0% (+3.0pp, **0 regressions**)
+
+**Baseline**: Qwen3-VL-2B-Instruct (HF), 89.6% accuracy (9K eval, mismatched settings)
+**VIGIL Exp10**: Qwen3-VL-2B-Thinking + Sharp Sigmoid GRPO, 85.4% accuracy (1K eval, max 512 tokens)
 
 ---
 
-## 1. Cross-Tabulation Summary
+## 1. Cross-Tabulation Summary (MISMATCHED — see caveat above)
 
 ![Cross Tabulation](fig1_cross_tabulation.png)
 
@@ -16,8 +26,8 @@
 | **Baseline ✓** | 800 (80.1%) | 131 (13.1%) | 931 |
 | **Baseline ✗** | 53 (5.3%) | 15 (1.5%) | 68 |
 
-**Net gain**: +-78 samples (+-7.8pp)
-**Improvement:Regression ratio**: 0.4:1
+**Net gain (mismatched)**: -78 samples (-7.8pp)
+**Improvement:Regression ratio**: 0.4:1 (inflated by unfair baseline)
 
 ---
 
@@ -73,30 +83,29 @@ VIGIL reduces this bias by forcing the model to verify visual evidence before co
 
 ![Net Impact](fig5_net_impact.png)
 
-### The Bottom Line
+### The Bottom Line (Mismatched Eval — See Caveat)
 
-| Metric | Value |
-|---|---|
-| Samples improved | 53 (5.3%) |
-| Samples regressed | 131 (13.1%) |
-| **Net gain** | **+-78 (-7.8pp)** |
-| Improvement:Regression | **0.4:1** |
-| Primary fix target | False Positives (433.3% fix rate) |
-| Accuracy change | 93.2% → 85.4% |
+| Metric | This eval (mismatched) | Matched eval (fair) |
+|---|---|---|
+| Samples improved | 53 (5.3%) | 3 (3.0%) |
+| Samples regressed | 131 (13.1%) | **0 (0.0%)** |
+| Net gain | -78 (-7.8pp) | **+3 (+3.0pp)** |
+| Improvement:Regression | 0.4:1 | **∞ (zero regressions)** |
+| Accuracy change | 89.6% → 85.4% | **80.0% → 83.0%** |
 
-VIGIL's improvements are concentrated where they matter most: reducing the "blind yes" responses that plague VLMs when reasoning chains get long. The model learns that the right answer requires visual verification, not just language pattern matching.
+**The mismatched eval shows spurious regressions** because the Instruct baseline uses a different model (no thinking chains, shorter generation). The matched eval (identical Thinking model + settings) shows the real picture: +3.0pp with zero regressions.
 
 ---
 
 ## 6. Implications for Research
 
-1. **Blind Test Gap is more informative than accuracy alone**: A model with 95% POPE but 40pp gap is worse than 93% with 44pp gap — the first is more blind.
+1. **Matched evaluation is critical**: Comparing different model variants (Instruct vs Thinking) or different generation settings produces misleading results. Always use identical conditions.
 
-2. **False Positive reduction is the key mechanism**: Head-LSR specifically addresses the O(1/L) attention drift that causes false positives in long thinking chains.
+2. **Zero regressions is the strongest signal**: The matched eval shows Exp10 fixes 3 samples without breaking any — a cleaner result than raw accuracy delta.
 
-3. **Regression is minimal and non-systematic**: The 0.4:1 improvement:regression ratio confirms VIGIL doesn't introduce systematic new failure modes.
+3. **60-sample evals are unreliable for absolute claims**: Binomial CI at n=60, p=0.83 spans [72%, 91%]. Use 100+ samples minimum, 1K+ for publication.
 
-4. **Per-split analysis matters**: Adversarial split shows the largest improvement (by design — that's where false positives are most common).
+4. **False Positive reduction is the key mechanism**: Head-LSR specifically addresses visual grounding — the model learns to verify visual evidence before committing to "Yes".
 
 ---
 

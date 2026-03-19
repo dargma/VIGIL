@@ -4,6 +4,8 @@
 **Model**: Qwen3-VL-2B-Thinking
 **Baseline**: POPE 91.7%, Blind Gap 40.0pp, TextVQA 72.7%
 
+> **⚠️ CORRECTION (2026-03-19)**: All POPE/Gap numbers below are from **60-sample training evals** (unreliable — binomial CI at n=60, p=0.83 is [72%, 91%]). Matched 100-sample eval with identical settings shows Exp10: **83.0% POPE** (+3.0pp vs baseline 80.0%, 0 regressions). The "95.0%" ceiling and stability rankings are **relative comparisons between methods on the same small eval** and should not be cited as absolute accuracy. See `lab/reports/matched_eval/matched_100_results.json`.
+
 ---
 
 ## 1. Experiment Overview

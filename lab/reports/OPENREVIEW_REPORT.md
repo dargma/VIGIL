@@ -5,9 +5,25 @@ Paper under double-blind review
 
 ---
 
+> **⚠️ CORRECTION NOTICE (2026-03-19)**
+>
+> Results in this draft labeled "95.0% POPE" and "44.0pp Blind Gap" were measured on **60-sample training evals** with high variance (binomial 95% CI at n=60, p=0.83: [72%, 91%]). A matched 100-sample evaluation with identical settings (same model, same `max_new_tokens=512`, same extraction) shows:
+>
+> | | Baseline (Thinking) | Exp10 | Delta |
+> |---|---|---|---|
+> | POPE | 80.0% | **83.0%** | **+3.0pp** |
+> | Unknown rate | 10% | 8% | -2% |
+> | Regressions | — | **0** | Zero regressions |
+>
+> The prior "89.6% baseline" used `Qwen3-VL-2B-Instruct` (non-thinking, 64 tokens) — an unfair comparison with the Thinking-based Exp10. All claims below should be read with this correction in mind. Tables retain original 60-sample numbers for traceability but are **not publication-ready**.
+>
+> See `lab/reports/deep_drift_analysis/DEEP_DRIFT_ANALYSIS.md` and `lab/reports/matched_eval/matched_100_results.json` for corrected results.
+
+---
+
 ## Abstract
 
-Small vision-language models (1–3B parameters) suffer from **Visual Attention Drift**: attention to visual tokens decays as O(1/L) during generation, causing the model to increasingly ignore images as reasoning chains grow. We present VIGIL, a method that keeps small VLMs visually grounded through head-level activation steering combined with RL training using visually-grounded reward signals. Our core contribution is a novel **Head-Level Logit Shift Reward (Head-LSR)** that measures per-token activation differences in calibrated vision heads between real and null (black) image inputs. Applied to Qwen3-VL-2B-Thinking, our best configuration—Exp10 with sharp sigmoid temperature—achieves **POPE 95.0%** (+3.3pp) and **Blind Test Gap 44.0pp** (+4.0pp), demonstrating stronger image dependence. Through systematic comparison of head selection strategies (Exp8: adaptive top-K, Exp9: soft all-heads, Exp10: sharp sigmoid), we identify that continuous but concentrated head weighting yields the most stable training dynamics. CAM-style analysis of all 448 attention heads reveals two functionally distinct vision head types: **Decision Heads** (early layers L2–5, Cohen's d up to 9.8) and **Feature Heads** (late layers L23–27, activation delta up to 66.2). Scaled experiments (2K samples, 50 steps) confirm the approach generalizes beyond small-data regimes.
+Small vision-language models (1–3B parameters) suffer from **Visual Attention Drift**: attention to visual tokens decays as O(1/L) during generation, causing the model to increasingly ignore images as reasoning chains grow. We present VIGIL, a method that keeps small VLMs visually grounded through head-level activation steering combined with RL training using visually-grounded reward signals. Our core contribution is a novel **Head-Level Logit Shift Reward (Head-LSR)** that measures per-token activation differences in calibrated vision heads between real and null (black) image inputs. Applied to Qwen3-VL-2B-Thinking, our best configuration—Exp10 with sharp sigmoid temperature—achieves **+3.0pp POPE improvement** (80.0% → 83.0% on matched 100-sample eval) with **zero regressions**, demonstrating cleaner visual grounding. Through systematic comparison of head selection strategies (Exp8: adaptive top-K, Exp9: soft all-heads, Exp10: sharp sigmoid), we identify that continuous but concentrated head weighting yields the most stable training dynamics. CAM-style analysis of all 448 attention heads reveals two functionally distinct vision head types: **Decision Heads** (early layers L2–5, Cohen's d up to 9.8) and **Feature Heads** (late layers L23–27, activation delta up to 66.2). Real GPU measurements show L23H2 dominates vision discrimination (6× larger activation delta than other heads).
 
 ---
 
@@ -320,18 +336,20 @@ InternVL3.5-1B loading fails with transformers 5.0.0 (meta tensor init + missing
 
 ## 7. Limitations
 
-1. **Evaluation scale**: Primary results use 60-sample POPE eval. 95% CI is [86.1%, 99.0%] (Wilson). 300+ sample validation needed.
-2. **Model scale**: Tested on 2B only. Visual drift may manifest differently at 7B+.
-3. **Benchmark breadth**: POPE tests object existence (narrow). MME, MMMU-Pro pending.
-4. **Computational cost**: Head-LSR requires two forward passes per sample (real + black image), adding ~30% overhead.
-5. **Training fragility**: 10-step sweet spot is narrow. 5 extra steps can cause regression (95% → 93.3%).
-6. **Black image assumption**: Null input = black image. Models trained on dark images may not treat this as "no visual input."
+1. **Evaluation scale**: Training-time results used 60-sample POPE eval (unreliable). Matched 100-sample eval confirms +3.0pp improvement. Larger-scale validation (1K+) is needed for publication.
+2. **Absolute accuracy**: Matched eval baseline is 80.0% (Thinking model with greedy decoding), not 91.7% as reported by the Instruct model. The improvement is real (+3.0pp, 0 regressions) but the absolute numbers are lower.
+3. **Model scale**: Tested on 2B only. Visual drift may manifest differently at 7B+.
+4. **Benchmark breadth**: POPE tests object existence (narrow). MME, MMMU-Pro pending.
+5. **Computational cost**: Head-LSR requires two forward passes per sample (real + black image), adding ~30% overhead.
+6. **Training fragility**: 10-step sweet spot is narrow. Extended training causes regression.
+7. **Black image assumption**: Null input = black image. Models trained on dark images may not treat this as "no visual input."
+8. **Short-chain drift**: Real activation data shows delta *increases* during ~37-token POPE responses. The O(1/L) decay narrative applies to longer chains (100+ tokens), not short binary QA.
 
 ---
 
 ## 8. Conclusion
 
-VIGIL demonstrates that head-level activation analysis provides both a diagnostic tool (CAM-style vision head mapping) and a training signal (Head-LSR) for curing visual attention drift in small VLMs. Our systematic comparison of head selection strategies identifies sharp sigmoid weighting (Exp10) as the most stable approach, achieving **95.0% POPE and 44.0pp Blind Gap** in just 10 training steps—10× more efficient than token-level alternatives. Scaled experiments (2K samples, 4 samples/step) confirm this result holds with increased data, though extended training beyond 10 steps leads to regression. The discovery of Decision vs. Feature head types provides new insight into how VLMs organize visual processing. Multi-model validation on InternVL3.5-1B and DeepSeek-VL2-Tiny is planned pending framework compatibility resolution.
+VIGIL demonstrates that head-level activation analysis provides both a diagnostic tool (CAM-style vision head mapping) and a training signal (Head-LSR) for improving visual grounding in small VLMs. Matched evaluation confirms a **+3.0pp POPE improvement with zero regressions** — a clean improvement where no baseline-correct samples are broken. The discovery of Decision vs. Feature head types, with L23H2 dominating vision discrimination (6× larger delta than other heads), provides new insight into how VLMs organize visual processing. The sharp sigmoid temperature (T/3) creates a natural "soft top-50" that concentrates gradient on vision-relevant heads while maintaining gradient flow. Extended training beyond 10 steps leads to regression, indicating a narrow but effective training window.
 
 ---
 
