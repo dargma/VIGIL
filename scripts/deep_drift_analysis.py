@@ -383,28 +383,21 @@ def fig2_head_cam_heatmap(real_data=None):
     # Create figure
     fig, axes = plt.subplots(2, 1, figsize=(16, 10), sharex=True)
     vmax = max(np.percentile(baseline_cam, 95), np.percentile(vigil_cam, 95), 1.0)
-    think_boundary = int(n_tokens * 0.7)  # approximate
+
+    # Compute per-head summary stats for annotation
+    bl_head_means = baseline_cam.mean(axis=1)
+    vg_head_means = vigil_cam.mean(axis=1)
 
     # Baseline heatmap
     im1 = axes[0].imshow(baseline_cam, aspect='auto', cmap='hot',
                           interpolation='bilinear', vmin=0, vmax=vmax)
     axes[0].set_yticks(range(n_heads))
     axes[0].set_yticklabels(head_labels, fontsize=8)
-    axes[0].set_title(f'BASELINE: Vision Head Activation Across Generation ({data_label})\n'
-                      '(brighter = stronger visual processing, dark = "blind")',
-                      fontsize=13, fontweight='bold')
-    axes[0].axvline(think_boundary, color='cyan', linestyle='--', linewidth=1.5, alpha=0.7)
-    axes[0].text(think_boundary + 2, 0.5, '</think>', color='cyan', fontsize=9)
-    plt.colorbar(im1, ax=axes[0], label='Activation Δ (real - black)', shrink=0.8)
-
-    # Add "going dark" annotation
-    ann_x = min(int(n_tokens * 0.8), n_tokens - 1)
-    ann_txt_x = min(int(n_tokens * 0.55), n_tokens - 1)
-    axes[0].annotate('Heads going dark\n→ model ignoring image',
-                    xy=(ann_x, 2), xytext=(ann_txt_x, 5),
-                    fontsize=10, color='white', fontweight='bold',
-                    arrowprops=dict(arrowstyle='->', color='white', lw=2),
-                    bbox=dict(facecolor='black', alpha=0.6, boxstyle='round'))
+    axes[0].set_title(f'Baseline (HF Thinking) — Per-Head Activation Δ ({data_label})\n'
+                      f'L23H2 dominates (mean Δ={bl_head_means[2]:.1f}), '
+                      f'decision heads L0-5 are ~10× weaker',
+                      fontsize=12, fontweight='bold')
+    plt.colorbar(im1, ax=axes[0], label='Activation Δ (real − black)', shrink=0.8)
 
     # VIGIL heatmap
     im2 = axes[1].imshow(vigil_cam, aspect='auto', cmap='hot',
@@ -412,19 +405,19 @@ def fig2_head_cam_heatmap(real_data=None):
     axes[1].set_yticks(range(n_heads))
     axes[1].set_yticklabels(head_labels, fontsize=8)
     axes[1].set_xlabel('Token Position in Generation', fontsize=12)
-    axes[1].set_title('VIGIL Exp10: Sustained Vision Head Activation\n'
-                      '(heads stay bright → model keeps using visual information)',
-                      fontsize=13, fontweight='bold')
-    axes[1].axvline(think_boundary, color='cyan', linestyle='--', linewidth=1.5, alpha=0.7)
-    axes[1].text(think_boundary + 2, 0.5, '</think>', color='cyan', fontsize=9)
-    plt.colorbar(im2, ax=axes[1], label='Activation Δ (real - black)', shrink=0.8)
+    axes[1].set_title(f'VIGIL Exp10 — Per-Head Activation Δ ({data_label})\n'
+                      f'Similar pattern to baseline; L23H2 mean Δ={vg_head_means[2]:.1f}',
+                      fontsize=12, fontweight='bold')
+    plt.colorbar(im2, ax=axes[1], label='Activation Δ (real − black)', shrink=0.8)
 
-    # Add "sustained" annotation
-    axes[1].annotate('Heads stay active\n→ visually grounded output',
-                    xy=(ann_x, 2), xytext=(ann_txt_x, 5),
-                    fontsize=10, color='yellow', fontweight='bold',
-                    arrowprops=dict(arrowstyle='->', color='yellow', lw=2),
-                    bbox=dict(facecolor='darkgreen', alpha=0.6, boxstyle='round'))
+    # Add difference summary as text
+    diff_text = "Per-head mean Δ (BL → Exp10):\n"
+    for i, (l, h, d) in enumerate(VISION_HEADS[:5]):
+        diff = vg_head_means[i] - bl_head_means[i]
+        diff_text += f"  L{l}H{h}: {bl_head_means[i]:.2f} → {vg_head_means[i]:.2f} ({diff:+.2f})\n"
+    axes[1].text(1.0, -0.18, diff_text, transform=axes[1].transAxes,
+                fontsize=8, fontfamily='monospace', va='top', ha='right',
+                bbox=dict(facecolor='white', alpha=0.8, boxstyle='round'))
 
     plt.savefig(OUT_DIR / "fig2_head_token_cam.png", dpi=200, bbox_inches='tight')
     plt.close()
