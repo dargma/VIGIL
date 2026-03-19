@@ -150,9 +150,11 @@ def load_or_simulate_exp10(baseline_recs, exp10_path=None):
 
 
 def cross_tabulate(baseline_recs, exp10_recs):
-    """Build cross-tabulation of baseline × exp10 correctness."""
-    assert len(baseline_recs) == len(exp10_recs)
+    """Build cross-tabulation of baseline × exp10 correctness.
 
+    Handles mismatched sizes by matching on index field.
+    If sizes match, uses positional alignment (legacy).
+    """
     cases = {
         "both_correct": [],    # ✓✓
         "improvement": [],     # ✗→✓ (VIGIL fixed)
@@ -160,7 +162,28 @@ def cross_tabulate(baseline_recs, exp10_recs):
         "both_wrong": [],      # ✗✗
     }
 
-    for b, e in zip(baseline_recs, exp10_recs):
+    if len(baseline_recs) == len(exp10_recs):
+        # Positional alignment
+        pairs = zip(baseline_recs, exp10_recs)
+    else:
+        # Match by question text — exp10 may be a subset evaluated on different indices
+        bl_by_q = {}
+        for r in baseline_recs:
+            key = (r["question"], r["category"])
+            bl_by_q[key] = r
+        pairs = []
+        unmatched = 0
+        for e in exp10_recs:
+            key = (e["question"], e["category"])
+            if key in bl_by_q:
+                pairs.append((bl_by_q[key], e))
+            else:
+                unmatched += 1
+        print(f"[cross_tab] Matched {len(pairs)} samples "
+              f"(baseline={len(baseline_recs)}, exp10={len(exp10_recs)}, "
+              f"unmatched={unmatched})")
+
+    for b, e in pairs:
         bc = b["correct"]
         ec = e["correct"]
 
@@ -508,6 +531,11 @@ def fig4_answer_shift(baseline_recs, exp10_recs):
         b_cat = [r for r in baseline_recs if r["category"] == cat]
         e_cat = [r for r in exp10_recs if r["category"] == cat]
 
+        if not b_cat or not e_cat:
+            ax.text(0.5, 0.5, f'No {cat} data', ha='center', va='center',
+                   transform=ax.transAxes, fontsize=14)
+            continue
+
         # Count Yes/No predictions
         b_yes = sum(1 for r in b_cat if r["extracted"].lower().strip() == "yes")
         b_no = len(b_cat) - b_yes
@@ -793,19 +821,32 @@ def main():
     exp10_recs = load_or_simulate_exp10(baseline_recs, args.exp10_results)
     cases = cross_tabulate(baseline_recs, exp10_recs)
 
-    n_total = len(baseline_recs)
-    print(f"\n[cases] Cross-tabulation:")
+    n_total = sum(len(v) for v in cases.values())
+
+    # Build matched subsets for fig2/fig4
+    # entries use baseline indices, so matched_indices works for baseline_recs
+    # For exp10, match by (question, category) since indices differ
+    matched_indices = set()
+    for case_list in cases.values():
+        for entry in case_list:
+            matched_indices.add(entry["index"])
+    matched_bl = [r for r in baseline_recs if r["index"] in matched_indices]
+
+    matched_questions = {(e["question"], e["category"]) for e in matched_bl}
+    matched_exp = [r for r in exp10_recs if (r["question"], r["category"]) in matched_questions]
+
+    print(f"\n[cases] Cross-tabulation ({n_total} matched samples):")
     print(f"  Both correct: {len(cases['both_correct']):,} ({len(cases['both_correct'])/n_total*100:.1f}%)")
     print(f"  Improvement:  {len(cases['improvement']):,} ({len(cases['improvement'])/n_total*100:.1f}%)")
     print(f"  Regression:   {len(cases['regression']):,} ({len(cases['regression'])/n_total*100:.1f}%)")
     print(f"  Both wrong:   {len(cases['both_wrong']):,} ({len(cases['both_wrong'])/n_total*100:.1f}%)")
 
     fig1_cross_tab(cases, n_total)
-    fig2_error_analysis(cases, baseline_recs)
+    fig2_error_analysis(cases, matched_bl)
     fig3_improvement_regression(cases)
-    fig4_answer_shift(baseline_recs, exp10_recs)
+    fig4_answer_shift(matched_bl, matched_exp)
     fig5_net_impact(cases, n_total)
-    write_report(cases, baseline_recs, exp10_recs, n_total)
+    write_report(cases, matched_bl, matched_exp, n_total)
 
     # Save raw case data for further analysis
     case_data = {k: v[:50] for k, v in cases.items()}  # first 50 of each

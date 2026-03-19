@@ -467,7 +467,7 @@ def run_full_pope_eval(max_samples=None):
         try:
             inputs = prepare_input(processor, image, question)
             with torch.no_grad():
-                gen = model.generate(**inputs, max_new_tokens=128,
+                gen = model.generate(**inputs, max_new_tokens=512,
                                      do_sample=False)
             out = gen[0][inputs["input_ids"].shape[1]:]
             prediction = processor.tokenizer.decode(out, skip_special_tokens=True).strip()

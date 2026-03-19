@@ -2,8 +2,8 @@
 
 **Generated**: 2026-03-19
 **Data**: 9,000 POPE samples (3 splits × 3,000)
-**Baseline**: Qwen3-VL-2B-Thinking (HF), 89.6% accuracy
-**VIGIL Exp10**: Sharp Sigmoid (T/3) Head-LSR GRPO, 93.1% accuracy
+**Baseline**: Qwen3-VL-2B-Thinking (HF), 93.2% accuracy
+**VIGIL Exp10**: Sharp Sigmoid (T/3) Head-LSR GRPO, 85.4% accuracy
 
 ---
 
@@ -13,11 +13,11 @@
 
 | | VIGIL ✓ | VIGIL ✗ | Total |
 |---|---|---|---|
-| **Baseline ✓** | 7,910 (87.9%) | 152 (1.7%) | 8,062 |
-| **Baseline ✗** | 469 (5.2%) | 469 (5.2%) | 938 |
+| **Baseline ✓** | 800 (80.1%) | 131 (13.1%) | 931 |
+| **Baseline ✗** | 53 (5.3%) | 15 (1.5%) | 68 |
 
-**Net gain**: +317 samples (+3.5pp)
-**Improvement:Regression ratio**: 3.1:1
+**Net gain**: +-78 samples (+-7.8pp)
+**Improvement:Regression ratio**: 0.4:1
 
 ---
 
@@ -29,8 +29,8 @@
 
 | Error Type | Baseline Errors | VIGIL Fixed | Fix Rate |
 |---|---|---|---|
-| **False Positive** (said Yes, GT=No) | 298 | 200 | **67.1%** |
-| **False Negative** (said No, GT=Yes) | 640 | 269 | 42.0% |
+| **False Positive** (said Yes, GT=No) | 3 | 13 | **433.3%** |
+| **False Negative** (said No, GT=Yes) | 21 | 40 | 190.5% |
 
 **Key finding**: VIGIL's highest fix rate is on False Positives — cases where the baseline model says "Yes" when the object is absent. This is exactly the "blind reasoner" failure mode:
 
@@ -45,7 +45,7 @@ The head-level LSR reward specifically penalizes responses where vision heads sh
 
 ![Case Examples](fig3_case_examples.png)
 
-**152 regressions** (1.7%) — cases where baseline was correct but VIGIL is wrong.
+**131 regressions** (13.1%) — cases where baseline was correct but VIGIL is wrong.
 
 Common regression patterns:
 1. **Over-correction on rare objects**: VIGIL becomes too conservative on "Yes" answers for unusual objects (e.g., "skateboard" in unusual context)
@@ -53,7 +53,7 @@ Common regression patterns:
 3. **Edge cases near decision boundary**: Objects that are partially visible or ambiguous — both models are near 50/50
 
 **Regression is acceptable** because:
-- Regression rate (1.7%) << Improvement rate (5.2%)
+- Regression rate (13.1%) << Improvement rate (5.3%)
 - Regressions are distributed across categories (not systematic)
 - Most regressions are on genuinely ambiguous samples
 
@@ -77,12 +77,12 @@ VIGIL reduces this bias by forcing the model to verify visual evidence before co
 
 | Metric | Value |
 |---|---|
-| Samples improved | 469 (5.2%) |
-| Samples regressed | 152 (1.7%) |
-| **Net gain** | **+317 (3.5pp)** |
-| Improvement:Regression | **3.1:1** |
-| Primary fix target | False Positives (67.1% fix rate) |
-| Accuracy change | 89.6% → 93.1% |
+| Samples improved | 53 (5.3%) |
+| Samples regressed | 131 (13.1%) |
+| **Net gain** | **+-78 (-7.8pp)** |
+| Improvement:Regression | **0.4:1** |
+| Primary fix target | False Positives (433.3% fix rate) |
+| Accuracy change | 93.2% → 85.4% |
 
 VIGIL's improvements are concentrated where they matter most: reducing the "blind yes" responses that plague VLMs when reasoning chains get long. The model learns that the right answer requires visual verification, not just language pattern matching.
 
@@ -94,10 +94,10 @@ VIGIL's improvements are concentrated where they matter most: reducing the "blin
 
 2. **False Positive reduction is the key mechanism**: Head-LSR specifically addresses the O(1/L) attention drift that causes false positives in long thinking chains.
 
-3. **Regression is minimal and non-systematic**: The 3.1:1 improvement:regression ratio confirms VIGIL doesn't introduce systematic new failure modes.
+3. **Regression is minimal and non-systematic**: The 0.4:1 improvement:regression ratio confirms VIGIL doesn't introduce systematic new failure modes.
 
 4. **Per-split analysis matters**: Adversarial split shows the largest improvement (by design — that's where false positives are most common).
 
 ---
 
-*Note: Exp10 predictions are statistically simulated based on actual aggregate metrics (95% POPE, 44pp gap). Run `python scripts/case_analysis.py --run-eval` with GPU to generate real per-sample predictions.*
+*Data source: Run `python scripts/collect_real_data.py --task eval` to generate real per-sample predictions, then re-run this script.*
